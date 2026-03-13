@@ -1249,7 +1249,7 @@ local Window = JitlerUI:CreateWindow({
 -- Tabs
 local ESPTab = Window:CreateTab({ Name = "ESP", Icon = "rbxassetid://6523858394" })
 local MainTab = Window:CreateTab({ Name = "Main", Icon = "rbxassetid://7734053495" })
-local AutoFarmTab = Window:CreateTab({ Name = "AutoFarm", Icon = "rbxassetid://111380546906150" })
+local AutoFarmTab = Window:CreateTab({ Name = "AutoFarm", Icon = "rbxassetid://130840043704422" })
 
 -- Main Sub-Tabs
 local SubMain = MainTab:CreateSubTab("Main")
