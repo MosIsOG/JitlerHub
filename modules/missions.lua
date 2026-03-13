@@ -22,6 +22,9 @@ local MissionSystem = {
     Thread = nil,
     AnchorConn = nil,
     AttackThread = nil,
+    CurrentTarget = nil,
+    CurrentHeightOffset = nil,
+    CurrentAttackDelay = nil,
 }
 
 local VALID_VILLAGES = { Snow = true, Sorythia = true, Rain = true, Durana = true, Rogue = true }
@@ -122,6 +125,7 @@ local function ScanMissionMarkersFixed()
     local markers = {}
     local debris = workspace:FindFirstChild("Debris"); if not debris then return markers end
     local ml = debris:FindFirstChild("Mission Locations"); if not ml then return markers end
+    local myUserId = LocalPlayer.UserId
     for _, villageFolder in ipairs(ml:GetChildren()) do
         for _, child in ipairs(villageFolder:GetDescendants()) do
             if child.Name == "MissionMarker" then
@@ -140,6 +144,21 @@ local function ScanMissionMarkersFixed()
                     end
                 end)
                 if not active then continue end
+
+                -- Check UserId attribute - only use markers assigned to us
+                local userIdOk = false
+                pcall(function()
+                    local uidVal = child:FindFirstChild("UserId")
+                    if uidVal then
+                        if tonumber(uidVal.Value) == myUserId then userIdOk = true end
+                    else
+                        local attr = child:GetAttribute("UserId")
+                        if attr ~= nil then
+                            if tonumber(attr) == myUserId then userIdOk = true end
+                        end
+                    end
+                end)
+                if not userIdOk then continue end
 
                 local parent = child.Parent
                 local pos = nil
@@ -231,18 +250,25 @@ local function FindNPCNear(pos, radius, nameFilter)
     return found
 end
 
--- Wait for mission notification
+-- Wait for mission notification (also monitors mob death to keep attacking)
 local function WaitForMissionResult(timeout)
     timeout = timeout or 120
     local start = tick()
     while tick() - start < timeout do
         local complete = CheckNotification("Mission Complete")
-        local failed = CheckNotification("Mission Failed")
+        local failed = CheckNotification("Mission Failed!")
         local cooldown, cdText = CheckNotification("already completed this mission")
         if complete then return "complete" end
         if failed then return "failed" end
         if cooldown then return "cooldown", cdText end
-        task.wait(0.5)
+        -- Check if the attack thread died (mob dead) but mission not done yet
+        -- This means the mob died but we need to keep waiting for the result
+        if MissionSystem.AttackThread == nil or (MissionSystem.CurrentTarget and MissionSystem.CurrentTarget.humanoid and (not MissionSystem.CurrentTarget.humanoid.Parent or MissionSystem.CurrentTarget.humanoid.Health <= 0)) then
+            -- Mob is dead, just wait for the notification a bit longer
+            task.wait(0.5)
+        else
+            task.wait(0.5)
+        end
     end
     return "timeout"
 end
@@ -305,6 +331,11 @@ local function MissionFarmLoop(target, heightOffset, attackDelay)
     attackDelay = attackDelay or 0.12
     local model = target.model; local hum = target.humanoid
 
+    -- Save current target info for Chakra Safety reattach
+    MissionSystem.CurrentTarget = target
+    MissionSystem.CurrentHeightOffset = heightOffset
+    MissionSystem.CurrentAttackDelay = attackDelay
+
     MissionSystem.AnchorConn = RunService.Heartbeat:Connect(function()
         pcall(function()
             if not MissionSystem.ActiveMission then return end
@@ -317,6 +348,11 @@ local function MissionFarmLoop(target, heightOffset, attackDelay)
 
     MissionSystem.AttackThread = task.spawn(function()
         while MissionSystem.ActiveMission and hum and hum.Parent and hum.Health > 0 do
+            -- Check if Chakra Safety is hiding us - pause attacking
+            if Hub.ChakraSafety and Hub.ChakraSafety.Hiding then
+                task.wait(0.5)
+                continue
+            end
             pcall(function()
                 if Hub.DataEvent then
                     local br = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Head")
@@ -333,6 +369,9 @@ end
 local function StopMissionFarm()
     if MissionSystem.AnchorConn then MissionSystem.AnchorConn:Disconnect(); MissionSystem.AnchorConn = nil end
     if MissionSystem.AttackThread then pcall(task.cancel, MissionSystem.AttackThread); MissionSystem.AttackThread = nil end
+    MissionSystem.CurrentTarget = nil
+    MissionSystem.CurrentHeightOffset = nil
+    MissionSystem.CurrentAttackDelay = nil
 end
 
 local function MonitorKnockedForGrip(model)

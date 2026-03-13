@@ -527,6 +527,16 @@ end
 
 local function PauseFarms()
     local saved = {}
+    -- Save mission target info for reattach
+    if Hub.MissionSystem and Hub.MissionSystem.ActiveMission and Hub.MissionSystem.CurrentTarget then
+        saved.MissionTarget = Hub.MissionSystem.CurrentTarget
+        saved.MissionHeightOffset = Hub.MissionSystem.CurrentHeightOffset
+        saved.MissionAttackDelay = Hub.MissionSystem.CurrentAttackDelay
+        saved.MissionName = Hub.MissionSystem.ActiveMission
+        -- Stop the farm loop but keep ActiveMission set so WaitForMissionResult doesn't break
+        if Hub.MissionSystem.AnchorConn then Hub.MissionSystem.AnchorConn:Disconnect(); Hub.MissionSystem.AnchorConn = nil end
+        if Hub.MissionSystem.AttackThread then pcall(task.cancel, Hub.MissionSystem.AttackThread); Hub.MissionSystem.AttackThread = nil end
+    end
     -- BossFarm
     if Hub.BossFarm and Hub.BossFarm.Enabled then saved.BossFarm = true; Hub.BossFarm.Enabled = false; Hub.StopBossFarm() end
     -- AutoEye
@@ -537,19 +547,59 @@ local function PauseFarms()
     if Hub.AutoGripFarm and Hub.AutoGripFarm.MainEnabled then saved.GripMain = true; Hub.AutoGripFarm.MainEnabled = false; if Hub.AutoGripFarm.MainThread then pcall(task.cancel, Hub.AutoGripFarm.MainThread); Hub.AutoGripFarm.MainThread = nil end end
     -- AutoTrinket
     if Hub.AutoTrinket and Hub.AutoTrinket.Enabled then saved.AutoTrinket = true; Hub.AutoTrinket.Enabled = false; Hub.StopAutoTrinket() end
-    -- AutoMission
-    if Hub.MissionSystem and Hub.MissionSystem.AutoEnabled then saved.AutoMission = true; Hub.StopAutoMission() end
+    -- AutoMission (only stop if no active mission target - otherwise we handle it above)
+    if Hub.MissionSystem and Hub.MissionSystem.AutoEnabled and not saved.MissionTarget then saved.AutoMission = true; Hub.StopAutoMission() end
     return saved
 end
 
 local function ResumeFarms(saved)
     if not saved then return end
+    -- Reattach to mission mob if it's still alive
+    if saved.MissionTarget and Hub.MissionSystem then
+        local target = saved.MissionTarget
+        local hum = target.humanoid
+        if hum and hum.Parent and hum.Health > 0 then
+            Hub.MissionSystem.ActiveMission = saved.MissionName
+            Hub.MissionSystem.CurrentTarget = target
+            Hub.MissionSystem.CurrentHeightOffset = saved.MissionHeightOffset
+            Hub.MissionSystem.CurrentAttackDelay = saved.MissionAttackDelay
+            -- Restart the farm loop on this mob
+            local RunService = Hub.RunService
+            local model = target.model
+            local heightOffset = saved.MissionHeightOffset or 10
+            local attackDelay = saved.MissionAttackDelay or 0.12
+            Hub.MissionSystem.AnchorConn = RunService.Heartbeat:Connect(function()
+                pcall(function()
+                    if not Hub.MissionSystem.ActiveMission then return end
+                    if not hum or not hum.Parent or hum.Health <= 0 then return end
+                    local bossRoot = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Head") or model:FindFirstChildWhichIsA("BasePart"); if not bossRoot then return end
+                    local char = LocalPlayer.Character; if not char then return end; local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
+                    root.CFrame = CFrame.lookAt(bossRoot.Position + Vector3.new(0, heightOffset, 0), bossRoot.Position)
+                end)
+            end)
+            Hub.MissionSystem.AttackThread = task.spawn(function()
+                while Hub.MissionSystem.ActiveMission and hum and hum.Parent and hum.Health > 0 do
+                    if Hub.ChakraSafety and Hub.ChakraSafety.Hiding then task.wait(0.5); continue end
+                    pcall(function()
+                        if Hub.DataEvent then
+                            local br = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Head")
+                            if br then Hub.DataEvent:FireServer("Dash", "Sub", br.Position) end
+                            task.wait(0.05)
+                            Hub.DataEvent:FireServer("CheckMeleeHit", nil, "NormalAttack", false)
+                        end
+                    end)
+                    task.wait(attackDelay)
+                end
+            end)
+            Notify("Reattached to " .. (model.Name or "mob") .. "!", 2)
+        end
+    end
     if saved.BossFarm and Hub.BossFarm then Hub.BossFarm.Enabled = true; Hub.StartBossFarm() end
     if saved.AutoEye and Hub.AutoEye then Hub.AutoEye.Enabled = true; Hub.AutoEye.Thread = task.spawn(Hub.autoEyeLoop) end
     if saved.GripAlt and Hub.AutoGripFarm then Hub.AutoGripFarm.AltEnabled = true; Hub.AutoGripFarm.AltThread = task.spawn(Hub.autoGripAltLoop) end
     if saved.GripMain and Hub.AutoGripFarm then Hub.AutoGripFarm.MainEnabled = true; Hub.AutoGripFarm.MainThread = task.spawn(Hub.autoGripMainLoop) end
     if saved.AutoTrinket and Hub.AutoTrinket then Hub.AutoTrinket.Enabled = true; Hub.StartAutoTrinket() end
-    if saved.AutoMission then Hub.StartAutoMission() end
+    if saved.AutoMission and not saved.MissionTarget then Hub.StartAutoMission() end
 end
 
 local function ChakraSafetyLoop()
