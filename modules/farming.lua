@@ -237,13 +237,14 @@ local BossFarm = {
     Thread = nil, AnchorConn = nil,
     HyugaHeightBoost = 0, HyugaAnimConnection = nil, HyugaInVoid = false, HyugaVoidConn = nil,
     LavaSnakeHeightBoost = 0, LavaSnakeAnimConnection = nil,
+    MandaHeightBoost = 0, MandaAnimConnection = nil,
     HakuAnimConnection = nil, HakuSafeSpot = false, HakuSafeSpotEndTime = 0, AutoLootOnKill = false,
 }
 
 local BossConfigs = {
     ["Wooden Golem"] = { height = 16 }, ["Hyuga Boss"] = { height = 10.75 }, ["Lava Snake"] = { height = 38 },
-    ["Haku Boss"] = { height = 10.75 }, ["Barbarit The Rose"] = { height = 12 }, ["Manda"] = { height = 38 },
-    ["Tairock"] = { height = 10.75 },
+    ["Haku Boss"] = { height = 10.75 }, ["Barbarit The Rose"] = { height = 13 }, ["Manda"] = { height = 38 },
+    ["Tairock"] = { height = 10.75 }, ["The Barbarian"] = { height = 13 },
 }
 local BossLootSpots = {
     ["Hyuga Boss"] = Vector3.new(-663.8, -359.9, -728.9), ["Wooden Golem"] = Vector3.new(-4716.2, 344.1, -2932.0),
@@ -307,6 +308,12 @@ local function MonitorLavaSnakeAnimations(bossModel)
     BossFarm.LavaSnakeAnimConnection = animator.AnimationPlayed:Connect(function(track) if not BossFarm.Enabled then return end; local assetId = track.Animation.AnimationId:match("rbxassetid://(%d+)") or track.Animation.AnimationId; if assetId == "9954909571" then BossFarm.LavaSnakeHeightBoost = 10; task.spawn(function() while track and track.IsPlaying and BossFarm.Enabled do task.wait(0.1) end; task.wait(0.5); BossFarm.LavaSnakeHeightBoost = 0 end) end end)
 end
 
+local function MonitorMandaAnimations(bossModel)
+    if BossFarm.MandaAnimConnection then BossFarm.MandaAnimConnection:Disconnect(); BossFarm.MandaAnimConnection = nil end
+    if not bossModel then return end; local hum = bossModel:FindFirstChildOfClass("Humanoid"); if not hum then return end; local animator = hum:FindFirstChildOfClass("Animator"); if not animator then return end
+    BossFarm.MandaAnimConnection = animator.AnimationPlayed:Connect(function(track) if not BossFarm.Enabled then return end; local assetId = track.Animation.AnimationId:match("rbxassetid://(%d+)") or track.Animation.AnimationId; if assetId == "9954909571" then BossFarm.MandaHeightBoost = 10; task.spawn(function() while track and track.IsPlaying and BossFarm.Enabled do task.wait(0.1) end; task.wait(0.5); BossFarm.MandaHeightBoost = 0 end) end end)
+end
+
 local function MonitorHakuBossIceDragon()
     if BossFarm.HakuAnimConnection then BossFarm.HakuAnimConnection:Disconnect(); BossFarm.HakuAnimConnection = nil end
     local debris = workspace:FindFirstChild("Debris"); if not debris then local conn; conn = workspace.ChildAdded:Connect(function(c) if c.Name == "Debris" then conn:Disconnect(); MonitorHakuBossIceDragon() end end); return end
@@ -322,7 +329,7 @@ local function StartBossFarm()
     end
     local hum, model
     -- For bosses that trigger-spawn, retry until they appear
-    if BossFarm.SelectedBoss == "Lava Snake" or BossFarm.SelectedBoss == "Tairock" then
+    if BossFarm.SelectedBoss == "Lava Snake" or BossFarm.SelectedBoss == "Tairock" or BossFarm.SelectedBoss == "Manda" then
         for attempt = 1, 10 do
             hum, model = FindBoss(BossFarm.SelectedBoss)
             if hum and model then break end
@@ -336,6 +343,7 @@ local function StartBossFarm()
     BossFarm.Target = hum; BossFarm.TargetName = model.Name; if config then BossFarm.HeightOffset = config.height end
     if BossFarm.TargetName == "Hyuga Boss" then MonitorHyugaBossAnimations(model); MonitorHyugaVoid(model); task.spawn(function() BossFarm.HyugaHeightBoost = -2; task.wait(5); if BossFarm.HyugaHeightBoost == -2 then BossFarm.HyugaHeightBoost = 0 end end) end
     if BossFarm.TargetName == "Lava Snake" then MonitorLavaSnakeAnimations(model) end
+    if BossFarm.TargetName == "Manda" then MonitorMandaAnimations(model) end
     if BossFarm.TargetName == "Haku Boss" then MonitorHakuBossIceDragon() end
     if Hub.DataEvent and BossFarm.WeaponName ~= "" then pcall(function() Hub.DataEvent:FireServer("Item", "Selected", BossFarm.WeaponName) end) end
     task.wait(0.5); Notify("Farming: " .. BossFarm.TargetName, 3)
@@ -354,7 +362,7 @@ local function StartBossFarm()
             if BossFarm.HakuSafeSpot and tick() >= BossFarm.HakuSafeSpotEndTime then BossFarm.HakuSafeSpot = false end
             if BossFarm.HyugaInVoid then root.CFrame = CFrame.new(HYUGA_VOID_SAFE_SPOT)
             elseif BossFarm.HakuSafeSpot then root.CFrame = CFrame.new(-2969.2, 1832.9, -9610.4)
-            else root.CFrame = CFrame.lookAt(bossRoot.Position + Vector3.new(0, BossFarm.HeightOffset + BossFarm.HyugaHeightBoost + BossFarm.LavaSnakeHeightBoost, 0), bossRoot.Position) end
+            else root.CFrame = CFrame.lookAt(bossRoot.Position + Vector3.new(0, BossFarm.HeightOffset + BossFarm.HyugaHeightBoost + BossFarm.LavaSnakeHeightBoost + BossFarm.MandaHeightBoost, 0), bossRoot.Position) end
         end)
     end)
 
@@ -369,11 +377,12 @@ local function StartBossFarm()
 end
 
 local function StopBossFarm()
-    BossFarm.Enabled = false; BossFarm.HyugaHeightBoost = 0; BossFarm.HyugaInVoid = false; BossFarm.HakuSafeSpot = false; BossFarm.LavaSnakeHeightBoost = 0
+    BossFarm.Enabled = false; BossFarm.HyugaHeightBoost = 0; BossFarm.HyugaInVoid = false; BossFarm.HakuSafeSpot = false; BossFarm.LavaSnakeHeightBoost = 0; BossFarm.MandaHeightBoost = 0
     if BossFarm.HyugaVoidConn then task.cancel(BossFarm.HyugaVoidConn); BossFarm.HyugaVoidConn = nil end
     if BossFarm.HyugaAnimConnection then BossFarm.HyugaAnimConnection:Disconnect(); BossFarm.HyugaAnimConnection = nil end
     if BossFarm.HakuAnimConnection then BossFarm.HakuAnimConnection:Disconnect(); BossFarm.HakuAnimConnection = nil end
     if BossFarm.LavaSnakeAnimConnection then BossFarm.LavaSnakeAnimConnection:Disconnect(); BossFarm.LavaSnakeAnimConnection = nil end
+    if BossFarm.MandaAnimConnection then BossFarm.MandaAnimConnection:Disconnect(); BossFarm.MandaAnimConnection = nil end
     if BossFarm.AnchorConn then BossFarm.AnchorConn:Disconnect(); BossFarm.AnchorConn = nil end
     if BossFarm.Thread then pcall(task.cancel, BossFarm.Thread); BossFarm.Thread = nil end
 end

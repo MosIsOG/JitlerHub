@@ -472,23 +472,23 @@ local function ExecuteMissionCase(missionName)
             task.wait(2)
         end
         if not cpModel then Notify("Corrupted Point not found after retries!", 3); MissionSystem.ActiveMission = nil; return "failed" end
-        -- Teleport to it with -5 Y offset, laying down facing up
+        -- Teleport to it with -5 Y offset, facing up toward the CorruptedPoint
         local cpPart = cpModel:FindFirstChildWhichIsA("BasePart")
         if cpPart then
             local pos = cpPart.Position + Vector3.new(0, -5, 0)
             TeleportTo(pos); task.wait(0.3)
-            local c = LocalPlayer.Character; if c then local r = c:FindFirstChild("HumanoidRootPart"); if r then r.CFrame = CFrame.new(pos) * CFrame.Angles(-math.pi / 2, 0, 0) end end
+            local c = LocalPlayer.Character; if c then local r = c:FindFirstChild("HumanoidRootPart"); if r then r.CFrame = CFrame.new(pos) * CFrame.Angles(math.pi / 2, 0, 0) end end
             task.wait(0.2)
         end
         local healthVal = cpModel:FindFirstChild("Health")
-        -- Anchor with -5 offset, facing up (laying down), until destroyed
+        -- Anchor with -5 offset, facing up toward the CorruptedPoint, until destroyed
         MissionSystem.AnchorConn = RunService.Heartbeat:Connect(function()
             pcall(function()
                 if not MissionSystem.ActiveMission or not cpModel or not cpModel.Parent then return end
                 local part = cpModel:FindFirstChildWhichIsA("BasePart"); if not part then return end
                 local c = LocalPlayer.Character; if not c then return end; local root = c:FindFirstChild("HumanoidRootPart"); if not root then return end
                 local pos = part.Position + Vector3.new(0, -5, 0)
-                root.CFrame = CFrame.new(pos) * CFrame.Angles(-math.pi / 2, 0, 0)
+                root.CFrame = CFrame.new(pos) * CFrame.Angles(math.pi / 2, 0, 0)
                 root.Velocity = Vector3.zero; root.RotVelocity = Vector3.zero
             end)
         end)
