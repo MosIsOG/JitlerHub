@@ -173,8 +173,10 @@ end
 local function ScanForEntities()
     local lc = LocalPlayer.Character; if not lc then return end; local lr = lc:FindFirstChild("HumanoidRootPart"); if not lr then return end; local pp = lr.Position; local checked = {}
     for _, fn in ipairs({ workspace:FindFirstChild("NPCs"), workspace:FindFirstChild("Mobs"), workspace:FindFirstChild("Enemies") }) do
-        if fn then for _, obj in ipairs(fn:GetChildren()) do if obj:IsA("Model") and obj ~= lc and not checked[obj] then checked[obj] = true; local r = obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChild("Head"); if r and (pp - r.Position).Magnitude <= 250 and obj:FindFirstChildOfClass("Humanoid") and not AutoBlock.MonitoredEntities[obj] then MonitorEntity(obj) end end end end
+        if fn then for _, obj in ipairs(fn:GetDescendants()) do if obj:IsA("Model") and obj ~= lc and not checked[obj] then checked[obj] = true; local r = obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChild("Head"); if r and (pp - r.Position).Magnitude <= 250 and obj:FindFirstChildOfClass("Humanoid") and not AutoBlock.MonitoredEntities[obj] then MonitorEntity(obj) end end end end
     end
+    -- Also scan workspace direct children (bosses can be top-level)
+    for _, obj in ipairs(workspace:GetChildren()) do if obj:IsA("Model") and obj ~= lc and not checked[obj] then checked[obj] = true; local r = obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChild("Head"); if r and (pp - r.Position).Magnitude <= 250 and obj:FindFirstChildOfClass("Humanoid") and not AutoBlock.MonitoredEntities[obj] then MonitorEntity(obj) end end end
     for _, player in ipairs(Players:GetPlayers()) do if player ~= LocalPlayer and player.Character and not checked[player.Character] then local cr = player.Character:FindFirstChild("HumanoidRootPart"); if cr and (pp - cr.Position).Magnitude <= 250 and not AutoBlock.MonitoredEntities[player.Character] then MonitorEntity(player.Character) end end end
     for model, conns in pairs(AutoBlock.MonitoredEntities) do
         if not model or not model.Parent then for _, c in ipairs(conns) do if typeof(c) == "RBXScriptConnection" then c:Disconnect() end end; AutoBlock.MonitoredEntities[model] = nil
