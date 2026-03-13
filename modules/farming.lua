@@ -60,30 +60,30 @@ Hub.ToggleFullBright = ToggleFullBright
 -- BULK SELLER (Direct Remote)
 -- ================================================================
 local function BulkSellTrinkets()
-    pcall(function()
-        Hub.RefreshDataEvent()
-        if Hub.DataEvent then Hub.DataEvent:FireServer("SellingBulk", 5, "Trinket") end
+    local ok, err = pcall(function()
+        Hub.RefreshDataFunction()
+        if Hub.DataFunction then Hub.DataFunction:InvokeServer("SellingBulk", 5, "Trinket") end
     end)
-    Notify("Bulk sold all Trinkets!", 2)
+    if ok then Notify("Bulk sold all Trinkets!", 2) else Notify("Sell failed: " .. tostring(err), 3) end
 end
 
 local function BulkSellGems(amount)
     amount = tonumber(amount) or 0
-    pcall(function()
-        Hub.RefreshDataEvent()
-        if Hub.DataEvent then Hub.DataEvent:FireServer("SellingBulk", amount, "Gem") end
+    local ok, err = pcall(function()
+        Hub.RefreshDataFunction()
+        if Hub.DataFunction then Hub.DataFunction:InvokeServer("SellingBulk", amount, "Gem") end
     end)
-    Notify("Bulk sold Gems (arg: " .. tostring(amount) .. ")", 2)
+    if ok then Notify("Bulk sold Gems (arg: " .. tostring(amount) .. ")", 2) else Notify("Sell failed: " .. tostring(err), 3) end
 end
 
 local function BulkSellFruits()
-    pcall(function()
-        Hub.RefreshDataEvent()
+    local ok, err = pcall(function()
+        Hub.RefreshDataFunction()
         local fishTarget = nil
         pcall(function() fishTarget = workspace:GetChildren()[68] and workspace:GetChildren()[68]:FindFirstChild("HumanoidRootPart") end)
-        if Hub.DataEvent then Hub.DataEvent:FireServer("SellingBulk", 0, "Fruit", "Fish", fishTarget) end
+        if Hub.DataFunction then Hub.DataFunction:InvokeServer("SellingBulk", 0, "Fruit", "Fish", fishTarget) end
     end)
-    Notify("Bulk sold all Fruits!", 2)
+    if ok then Notify("Bulk sold all Fruits!", 2) else Notify("Sell failed: " .. tostring(err), 3) end
 end
 
 Hub.BulkSellTrinkets = BulkSellTrinkets

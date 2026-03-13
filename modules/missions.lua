@@ -488,9 +488,55 @@ local function ExecuteMissionCase(missionName)
         StopMissionFarm(); MissionSystem.ActiveMission = nil; return result
 
     elseif missionName == "Crate Delivery" then
+        -- The Crate Delivery NPC has a MissionMarker assigned to our UserId
+        -- We already teleported to the marker above, now find and interact with the NPC
         task.wait(0.5)
-        pcall(function() Hub.DataFunction:InvokeServer("Crate Delivery") end)
-        local result = WaitForMissionResult(30)
+        -- Look for NPC near the marker position with no distance limit
+        local npc = nil
+        pcall(function()
+            for _, fn in ipairs({"NPCs", "Mobs", "Enemies"}) do
+                local f = workspace:FindFirstChild(fn)
+                if f then
+                    for _, m in ipairs(f:GetDescendants()) do
+                        if m.Name == "MissionMarker" then
+                            local uid = nil
+                            pcall(function() uid = m:GetAttribute("UserId") or (m:FindFirstChild("UserId") and m:FindFirstChild("UserId").Value) end)
+                            if uid and tonumber(uid) == LocalPlayer.UserId then
+                                npc = m.Parent
+                            end
+                        end
+                    end
+                end
+            end
+            -- Also scan workspace children and Debris
+            for _, container in ipairs({workspace, workspace:FindFirstChild("Debris")}) do
+                if container then
+                    for _, m in ipairs(container:GetDescendants()) do
+                        if m.Name == "MissionMarker" and not npc then
+                            local uid = nil
+                            pcall(function() uid = m:GetAttribute("UserId") or (m:FindFirstChild("UserId") and m:FindFirstChild("UserId").Value) end)
+                            if uid and tonumber(uid) == LocalPlayer.UserId then
+                                npc = m.Parent
+                            end
+                        end
+                    end
+                end
+            end
+        end)
+        if npc then
+            local root = npc:FindFirstChild("HumanoidRootPart") or npc:FindFirstChild("Head") or npc:FindFirstChildWhichIsA("BasePart")
+            if root then TeleportTo(root.Position); task.wait(0.5) end
+            -- Try interacting
+            local prox = npc:FindFirstChildOfClass("ProximityPrompt", true)
+            if prox then
+                if fireproximityprompt then fireproximityprompt(prox) end
+            else
+                PressE()
+            end
+        end
+        task.wait(0.5)
+        pcall(function() Hub.RefreshDataFunction(); if Hub.DataFunction then Hub.DataFunction:InvokeServer("Crate Delivery") end end)
+        local result = WaitForMissionResult(60)
         MissionSystem.ActiveMission = nil; return result
 
     else
