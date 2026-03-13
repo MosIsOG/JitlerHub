@@ -243,7 +243,7 @@ local BossFarm = {
 local BossConfigs = {
     ["Wooden Golem"] = { height = 16 }, ["Hyuga Boss"] = { height = 10.75 }, ["Lava Snake"] = { height = 38 },
     ["Haku Boss"] = { height = 10.75 }, ["Barbarit The Rose"] = { height = 12 }, ["Manda"] = { height = 38 },
-    ["Tairock"] = { height = 12 },
+    ["Tairock"] = { height = 10.75 },
 }
 local BossLootSpots = {
     ["Hyuga Boss"] = Vector3.new(-663.8, -359.9, -728.9), ["Wooden Golem"] = Vector3.new(-4716.2, 344.1, -2932.0),
