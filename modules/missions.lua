@@ -593,11 +593,14 @@ local function ExecuteMissionCase(missionName)
             Notify("Crate Delivery NPC not found!", 3)
         end
         task.wait(0.5)
-        -- Spam remote until Mission Complete (up to 10 attempts)
-        for i = 1, 10 do
-            pcall(function() Hub.RefreshDataFunction(); if Hub.DataFunction then Hub.DataFunction:InvokeServer("Crate Delivery") end end)
-            task.wait(0.5)
+        -- Fire remote once, then spam E until Mission Complete (max 3 seconds)
+        pcall(function() Hub.RefreshDataFunction(); if Hub.DataFunction then Hub.DataFunction:InvokeServer("Crate Delivery") end end)
+        task.wait(0.3)
+        local startTime = tick()
+        while tick() - startTime < 3 do
             if CheckNotification("Mission Complete") then break end
+            PressE()
+            task.wait(0.15)
         end
         local result = WaitForMissionResult(30)
         MissionSystem.ActiveMission = nil; return result
