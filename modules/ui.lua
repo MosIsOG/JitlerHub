@@ -280,6 +280,11 @@ AFRight:CreateSection("Bulk Sell")
 AFRight:CreateButton({ Name = "Sell All Trinkets", Callback = function() task.spawn(Hub.BulkSellTrinkets) end })
 AFRight:CreateButton({ Name = "Sell All Gems", Callback = function() task.spawn(Hub.BulkSellGems) end })
 AFRight:CreateButton({ Name = "Sell All Fruits", Callback = function() task.spawn(Hub.BulkSellFruits) end })
+
+AFLeft:CreateSection("Chakra Sense Safety")
+
+AFLeft:CreateToggle({ Name = "Enable Chakra Safety", Description = "Hide at Secret Spot when Chakra Sense detected", CurrentValue = false, Flag = "ChakraSafety", Callback = function(v) Hub.ChakraSafety.Enabled = v; if v then Hub.StartChakraSafety() else Hub.StopChakraSafety() end end })
+AFLeft:CreateSlider({ Name = "Check Interval", Range = { 0.5, 5 }, Increment = 0.5, Suffix = "s", CurrentValue = 1, Flag = "ChakraSafetyInterval", Callback = function(v) Hub.ChakraSafety.CheckInterval = v end })
 end
 
 -- ================================================================

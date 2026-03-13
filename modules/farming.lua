@@ -504,6 +504,99 @@ Players.PlayerRemoving:Connect(function(player) if ChakraTracker.Connections[pla
 Hub.ChakraTracker = ChakraTracker
 
 -- ================================================================
+-- CHAKRA SENSE SAFETY (Pause farms when someone uses Chakra Sense)
+-- ================================================================
+local SECRET_SPOT = Vector3.new(-4458.5, 660.7, -4895.2)
+local ChakraSafety = {
+    Enabled = false,
+    Hiding = false,
+    Thread = nil,
+    SavedPosition = nil,
+    SavedStates = {},
+    CheckInterval = 1,
+}
+
+local function GetActiveChakraCount()
+    local count = 0
+    for name in pairs(ChakraTracker.ActiveUsers) do
+        if name ~= LocalPlayer.Name then count = count + 1 end
+    end
+    return count
+end
+
+local function PauseFarms()
+    local saved = {}
+    -- BossFarm
+    if Hub.BossFarm and Hub.BossFarm.Enabled then saved.BossFarm = true; Hub.BossFarm.Enabled = false; Hub.StopBossFarm() end
+    -- AutoEye
+    if Hub.AutoEye and Hub.AutoEye.Enabled then saved.AutoEye = true; Hub.AutoEye.Enabled = false; if Hub.AutoEye.Thread then pcall(task.cancel, Hub.AutoEye.Thread); Hub.AutoEye.Thread = nil end end
+    -- AutoGripFarm Alt
+    if Hub.AutoGripFarm and Hub.AutoGripFarm.AltEnabled then saved.GripAlt = true; Hub.AutoGripFarm.AltEnabled = false; if Hub.AutoGripFarm.AltThread then pcall(task.cancel, Hub.AutoGripFarm.AltThread); Hub.AutoGripFarm.AltThread = nil end end
+    -- AutoGripFarm Main
+    if Hub.AutoGripFarm and Hub.AutoGripFarm.MainEnabled then saved.GripMain = true; Hub.AutoGripFarm.MainEnabled = false; if Hub.AutoGripFarm.MainThread then pcall(task.cancel, Hub.AutoGripFarm.MainThread); Hub.AutoGripFarm.MainThread = nil end end
+    -- AutoTrinket
+    if Hub.AutoTrinket and Hub.AutoTrinket.Enabled then saved.AutoTrinket = true; Hub.AutoTrinket.Enabled = false; Hub.StopAutoTrinket() end
+    -- AutoMission
+    if Hub.MissionSystem and Hub.MissionSystem.AutoEnabled then saved.AutoMission = true; Hub.StopAutoMission() end
+    return saved
+end
+
+local function ResumeFarms(saved)
+    if not saved then return end
+    if saved.BossFarm and Hub.BossFarm then Hub.BossFarm.Enabled = true; Hub.StartBossFarm() end
+    if saved.AutoEye and Hub.AutoEye then Hub.AutoEye.Enabled = true; Hub.AutoEye.Thread = task.spawn(Hub.autoEyeLoop) end
+    if saved.GripAlt and Hub.AutoGripFarm then Hub.AutoGripFarm.AltEnabled = true; Hub.AutoGripFarm.AltThread = task.spawn(Hub.autoGripAltLoop) end
+    if saved.GripMain and Hub.AutoGripFarm then Hub.AutoGripFarm.MainEnabled = true; Hub.AutoGripFarm.MainThread = task.spawn(Hub.autoGripMainLoop) end
+    if saved.AutoTrinket and Hub.AutoTrinket then Hub.AutoTrinket.Enabled = true; Hub.StartAutoTrinket() end
+    if saved.AutoMission then Hub.StartAutoMission() end
+end
+
+local function ChakraSafetyLoop()
+    while ChakraSafety.Enabled do
+        local activeCount = GetActiveChakraCount()
+        if activeCount > 0 and not ChakraSafety.Hiding then
+            -- Someone activated Chakra Sense - flee
+            ChakraSafety.Hiding = true
+            local char = LocalPlayer.Character
+            local root = char and char:FindFirstChild("HumanoidRootPart")
+            if root then ChakraSafety.SavedPosition = root.Position end
+            ChakraSafety.SavedStates = PauseFarms()
+            TeleportTo(SECRET_SPOT)
+            Notify("Chakra Sense detected! Hiding at Secret Spot...", 4)
+        elseif activeCount == 0 and ChakraSafety.Hiding then
+            -- All clear - resume
+            ChakraSafety.Hiding = false
+            if ChakraSafety.SavedPosition then
+                TeleportTo(ChakraSafety.SavedPosition)
+                ChakraSafety.SavedPosition = nil
+            end
+            ResumeFarms(ChakraSafety.SavedStates)
+            ChakraSafety.SavedStates = {}
+            Notify("Chakra Sense clear! Resuming farms.", 3)
+        end
+        task.wait(ChakraSafety.CheckInterval)
+    end
+end
+
+local function StartChakraSafety()
+    if ChakraSafety.Thread then pcall(task.cancel, ChakraSafety.Thread) end
+    ChakraSafety.Thread = task.spawn(ChakraSafetyLoop)
+end
+
+local function StopChakraSafety()
+    if ChakraSafety.Thread then pcall(task.cancel, ChakraSafety.Thread); ChakraSafety.Thread = nil end
+    if ChakraSafety.Hiding then
+        ChakraSafety.Hiding = false
+        if ChakraSafety.SavedPosition then TeleportTo(ChakraSafety.SavedPosition); ChakraSafety.SavedPosition = nil end
+        ResumeFarms(ChakraSafety.SavedStates); ChakraSafety.SavedStates = {}
+    end
+end
+
+Hub.ChakraSafety = ChakraSafety
+Hub.StartChakraSafety = StartChakraSafety
+Hub.StopChakraSafety = StopChakraSafety
+
+-- ================================================================
 -- BUY ITEMS (Direct Remote)
 -- ================================================================
 local BuyItemsData = {
