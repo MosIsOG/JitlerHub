@@ -459,6 +459,9 @@ local function ScanMobs()
         local isPlayer = false
         for _, p in ipairs(Players:GetPlayers()) do if p.Character == model then isPlayer = true; break end end
         if isPlayer then return end
+        -- Skip Dialog NPCs and WorldBosses (handled by their own ESP systems)
+        if IsDialogNPC(model) then return end
+        if BossESP.Enabled and IsWorldBoss(model) then return end
         local hum = model:FindFirstChildOfClass("Humanoid"); if not hum or hum.Health <= 0 then return end
         local root = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Head") or model:FindFirstChildWhichIsA("BasePart"); if not root then return end
         if (pp - root.Position).Magnitude > MobESP.MaxDistance then return end
@@ -510,3 +513,199 @@ end
 Hub.MobESP = MobESP
 Hub.StartMobESP = StartMobESP
 Hub.StopMobESP = StopMobESP
+
+-- ================================================================
+-- NPC ESP SYSTEM (Dialog NPCs only)
+-- ================================================================
+local NPCESP = { Enabled = false, MaxDistance = 500, TextSize = 14, ScanInterval = 3, TrackedNPCs = {}, ScanThread = nil, RenderConn = nil }
+
+local function IsDialogNPC(model)
+    local npcVal = model:FindFirstChild("NPC")
+    if not npcVal or not npcVal:IsA("StringValue") then return false end
+    return npcVal.Value == "Dialog"
+end
+
+local function IsCombatMob(model)
+    local npcVal = model:FindFirstChild("NPC")
+    if not npcVal or not npcVal:IsA("StringValue") then return false end
+    return npcVal.Value == "Combat"
+end
+
+local function IsWorldBoss(model)
+    if not IsCombatMob(model) then return false end
+    return model:FindFirstChild("WorldBoss") ~= nil
+end
+
+local function ScanNPCs()
+    if not NPCESP.Enabled then return end
+    local lc = LocalPlayer.Character; if not lc then return end
+    local lr = lc:FindFirstChild("HumanoidRootPart") or lc:FindFirstChild("Head"); if not lr then return end
+    local pp = lr.Position; local seen = {}
+
+    local function tryTrack(model)
+        if not model:IsA("Model") or seen[model] or model == lc then return end
+        seen[model] = true
+        if not IsDialogNPC(model) then return end
+        local root = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Head") or model:FindFirstChildWhichIsA("BasePart"); if not root then return end
+        if (pp - root.Position).Magnitude > NPCESP.MaxDistance then return end
+        if not NPCESP.TrackedNPCs[model] then
+            local txt = Drawing.new("Text"); txt.Center = true; txt.Outline = true; txt.OutlineColor = Color3.new(0, 0, 0)
+            txt.Color = Color3.fromRGB(0, 255, 100); txt.Size = NPCESP.TextSize; txt.Visible = false
+            NPCESP.TrackedNPCs[model] = { text = txt }
+        end
+    end
+
+    for _, fn in ipairs({"NPCs", "Mobs", "Enemies"}) do local folder = workspace:FindFirstChild(fn); if folder then for _, m in ipairs(folder:GetChildren()) do tryTrack(m) end end end
+    for _, m in ipairs(workspace:GetChildren()) do tryTrack(m) end
+end
+
+local function RenderNPCESP()
+    if not NPCESP.Enabled then for _, data in pairs(NPCESP.TrackedNPCs) do data.text.Visible = false end; return end
+    local lc = LocalPlayer.Character; local lr = lc and (lc:FindFirstChild("HumanoidRootPart") or lc:FindFirstChild("Head"))
+    for model, data in pairs(NPCESP.TrackedNPCs) do
+        if not model or not model.Parent then
+            data.text.Visible = false; pcall(function() data.text:Remove() end); NPCESP.TrackedNPCs[model] = nil; continue
+        end
+        local root = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Head") or model:FindFirstChildWhichIsA("BasePart")
+        if not root or not lr then data.text.Visible = false; continue end
+        local dist = (lr.Position - root.Position).Magnitude
+        if dist > NPCESP.MaxDistance then data.text.Visible = false; continue end
+        local pos, onScreen = Camera:WorldToViewportPoint(root.Position + Vector3.new(0, 3, 0))
+        if not onScreen then data.text.Visible = false; continue end
+        data.text.Position = Vector2.new(pos.X, pos.Y); data.text.Size = NPCESP.TextSize
+        data.text.Text = Format("%s [%d studs]", model.Name, math.floor(dist))
+        data.text.Color = Color3.fromRGB(0, 255, 100)
+        data.text.Visible = true
+    end
+end
+
+local function StartNPCESP()
+    if NPCESP.ScanThread then pcall(task.cancel, NPCESP.ScanThread) end
+    NPCESP.ScanThread = task.spawn(function() while NPCESP.Enabled do ScanNPCs(); task.wait(NPCESP.ScanInterval) end end)
+    if NPCESP.RenderConn then NPCESP.RenderConn:Disconnect() end
+    NPCESP.RenderConn = RunService.RenderStepped:Connect(RenderNPCESP)
+end
+
+local function StopNPCESP()
+    NPCESP.Enabled = false
+    if NPCESP.ScanThread then pcall(task.cancel, NPCESP.ScanThread); NPCESP.ScanThread = nil end
+    if NPCESP.RenderConn then NPCESP.RenderConn:Disconnect(); NPCESP.RenderConn = nil end
+    for _, data in pairs(NPCESP.TrackedNPCs) do pcall(function() data.text.Visible = false; data.text:Remove() end) end
+    NPCESP.TrackedNPCs = {}
+end
+
+Hub.NPCESP = NPCESP
+Hub.StartNPCESP = StartNPCESP
+Hub.StopNPCESP = StopNPCESP
+
+-- ================================================================
+-- WORLD BOSS ESP SYSTEM (distance-based transition)
+-- ================================================================
+local BossESP = { Enabled = false, MaxDistance = 2000, TransitionDist = 500, TextSize = 14, ScanInterval = 2, TrackedBosses = {}, ScanThread = nil, RenderConn = nil }
+
+local function ScanWorldBosses()
+    if not BossESP.Enabled then return end
+    local lc = LocalPlayer.Character; if not lc then return end
+    local lr = lc:FindFirstChild("HumanoidRootPart") or lc:FindFirstChild("Head"); if not lr then return end
+    local pp = lr.Position; local seen = {}
+
+    local function tryTrack(model)
+        if not model:IsA("Model") or seen[model] or model == lc then return end
+        seen[model] = true
+        if not IsWorldBoss(model) then return end
+        local hum = model:FindFirstChildOfClass("Humanoid"); if not hum or hum.Health <= 0 then return end
+        local root = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Head") or model:FindFirstChildWhichIsA("BasePart"); if not root then return end
+        if (pp - root.Position).Magnitude > BossESP.MaxDistance then return end
+        if not BossESP.TrackedBosses[model] then
+            -- Long-range text (mob ESP style, purple)
+            local farTxt = Drawing.new("Text"); farTxt.Center = true; farTxt.Outline = true; farTxt.OutlineColor = Color3.new(0, 0, 0)
+            farTxt.Color = Color3.fromRGB(180, 100, 255); farTxt.Size = BossESP.TextSize; farTxt.Visible = false
+            -- Close-range boss panel drawings (bg + name + hp bar + hp text)
+            local panelBg = Drawing.new("Square"); panelBg.Filled = true; panelBg.Color = Color3.fromRGB(15, 5, 30); panelBg.Transparency = 0.85; panelBg.Visible = false; panelBg.ZIndex = 20
+            local panelBorder = Drawing.new("Square"); panelBorder.Filled = false; panelBorder.Color = Color3.fromRGB(150, 80, 255); panelBorder.Thickness = 2; panelBorder.Transparency = 0.9; panelBorder.Visible = false; panelBorder.ZIndex = 20
+            local nameTxt = Drawing.new("Text"); nameTxt.Center = true; nameTxt.Outline = true; nameTxt.OutlineColor = Color3.new(0, 0, 0)
+            nameTxt.Color = Color3.fromRGB(220, 160, 255); nameTxt.Size = BossESP.TextSize + 2; nameTxt.Visible = false; nameTxt.ZIndex = 21
+            local hpBarBg = Drawing.new("Square"); hpBarBg.Filled = true; hpBarBg.Color = Color3.fromRGB(40, 20, 60); hpBarBg.Transparency = 0.9; hpBarBg.Visible = false; hpBarBg.ZIndex = 21
+            local hpBarFill = Drawing.new("Square"); hpBarFill.Filled = true; hpBarFill.Color = Color3.fromRGB(180, 80, 255); hpBarFill.Transparency = 1; hpBarFill.Visible = false; hpBarFill.ZIndex = 21
+            local hpTxt = Drawing.new("Text"); hpTxt.Center = true; hpTxt.Outline = true; hpTxt.OutlineColor = Color3.new(0, 0, 0)
+            hpTxt.Color = Color3.fromRGB(255, 255, 255); hpTxt.Size = BossESP.TextSize; hpTxt.Visible = false; hpTxt.ZIndex = 22
+            BossESP.TrackedBosses[model] = { humanoid = hum, farText = farTxt, panelBg = panelBg, panelBorder = panelBorder, nameTxt = nameTxt, hpBarBg = hpBarBg, hpBarFill = hpBarFill, hpTxt = hpTxt }
+        end
+    end
+
+    for _, fn in ipairs({"NPCs", "Mobs", "Enemies"}) do local folder = workspace:FindFirstChild(fn); if folder then for _, m in ipairs(folder:GetChildren()) do tryTrack(m) end end end
+    for _, m in ipairs(workspace:GetChildren()) do tryTrack(m) end
+end
+
+local function HideBossData(data)
+    data.farText.Visible = false; data.panelBg.Visible = false; data.panelBorder.Visible = false
+    data.nameTxt.Visible = false; data.hpBarBg.Visible = false; data.hpBarFill.Visible = false; data.hpTxt.Visible = false
+end
+
+local function RemoveBossData(data)
+    pcall(function() data.farText:Remove() end); pcall(function() data.panelBg:Remove() end); pcall(function() data.panelBorder:Remove() end)
+    pcall(function() data.nameTxt:Remove() end); pcall(function() data.hpBarBg:Remove() end); pcall(function() data.hpBarFill:Remove() end); pcall(function() data.hpTxt:Remove() end)
+end
+
+local function RenderBossESP()
+    if not BossESP.Enabled then for _, data in pairs(BossESP.TrackedBosses) do HideBossData(data) end; return end
+    local lc = LocalPlayer.Character; local lr = lc and (lc:FindFirstChild("HumanoidRootPart") or lc:FindFirstChild("Head"))
+    for model, data in pairs(BossESP.TrackedBosses) do
+        if not model or not model.Parent or not data.humanoid or not data.humanoid.Parent or data.humanoid.Health <= 0 then
+            HideBossData(data); RemoveBossData(data); BossESP.TrackedBosses[model] = nil; continue
+        end
+        local root = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Head") or model:FindFirstChildWhichIsA("BasePart")
+        if not root or not lr then HideBossData(data); continue end
+        local dist = (lr.Position - root.Position).Magnitude
+        if dist > BossESP.MaxDistance then HideBossData(data); continue end
+        local hum = data.humanoid
+        local hp = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
+        local pos, onScreen = Camera:WorldToViewportPoint(root.Position + Vector3.new(0, 5, 0))
+        if not onScreen then HideBossData(data); continue end
+
+        if dist > BossESP.TransitionDist then
+            -- Long-range: mob-style purple text
+            data.farText.Position = Vector2.new(pos.X, pos.Y); data.farText.Size = BossESP.TextSize
+            data.farText.Text = Format("%s [%d/%d] [%d studs]", model.Name, math.floor(hum.Health), math.floor(hum.MaxHealth), math.floor(dist))
+            data.farText.Visible = true
+            data.panelBg.Visible = false; data.panelBorder.Visible = false; data.nameTxt.Visible = false
+            data.hpBarBg.Visible = false; data.hpBarFill.Visible = false; data.hpTxt.Visible = false
+        else
+            -- Close-range: boss HP panel
+            data.farText.Visible = false
+            local pW, pH = 220, 50
+            local px, py = pos.X - pW / 2, pos.Y - pH - 10
+            data.panelBg.Position = Vector2.new(px, py); data.panelBg.Size = Vector2.new(pW, pH); data.panelBg.Visible = true
+            data.panelBorder.Position = Vector2.new(px, py); data.panelBorder.Size = Vector2.new(pW, pH); data.panelBorder.Visible = true
+            data.nameTxt.Position = Vector2.new(pos.X, py + 4); data.nameTxt.Size = BossESP.TextSize + 2
+            data.nameTxt.Text = model.Name; data.nameTxt.Visible = true
+            local barX, barY, barW, barH = px + 10, py + 24, pW - 20, 8
+            data.hpBarBg.Position = Vector2.new(barX, barY); data.hpBarBg.Size = Vector2.new(barW, barH); data.hpBarBg.Visible = true
+            data.hpBarFill.Position = Vector2.new(barX, barY); data.hpBarFill.Size = Vector2.new(barW * hp, barH)
+            data.hpBarFill.Color = hp > 0.6 and Color3.fromRGB(150, 80, 255) or hp > 0.3 and Color3.fromRGB(200, 120, 255) or Color3.fromRGB(255, 80, 120)
+            data.hpBarFill.Visible = true
+            data.hpTxt.Position = Vector2.new(pos.X, barY + barH + 2); data.hpTxt.Size = BossESP.TextSize - 1
+            data.hpTxt.Text = Format("%d / %d  (%d%%)", math.floor(hum.Health), math.floor(hum.MaxHealth), math.floor(hp * 100))
+            data.hpTxt.Visible = true
+        end
+    end
+end
+
+local function StartBossESP()
+    if BossESP.ScanThread then pcall(task.cancel, BossESP.ScanThread) end
+    BossESP.ScanThread = task.spawn(function() while BossESP.Enabled do ScanWorldBosses(); task.wait(BossESP.ScanInterval) end end)
+    if BossESP.RenderConn then BossESP.RenderConn:Disconnect() end
+    BossESP.RenderConn = RunService.RenderStepped:Connect(RenderBossESP)
+end
+
+local function StopBossESP()
+    BossESP.Enabled = false
+    if BossESP.ScanThread then pcall(task.cancel, BossESP.ScanThread); BossESP.ScanThread = nil end
+    if BossESP.RenderConn then BossESP.RenderConn:Disconnect(); BossESP.RenderConn = nil end
+    for _, data in pairs(BossESP.TrackedBosses) do HideBossData(data); RemoveBossData(data) end
+    BossESP.TrackedBosses = {}
+end
+
+Hub.BossESP = BossESP
+Hub.StartBossESP = StartBossESP
+Hub.StopBossESP = StopBossESP

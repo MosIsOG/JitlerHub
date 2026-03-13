@@ -77,6 +77,19 @@ ESPRight:CreateSection("Mob ESP")
 ESPRight:CreateToggle({ Name = "Enable Mob ESP", Description = "Show mob names & health", CurrentValue = false, Flag = "MobESP", Callback = function(v) Hub.MobESP.Enabled = v; if v then Hub.StartMobESP() else Hub.StopMobESP() end end })
 ESPRight:CreateSlider({ Name = "Mob Max Distance", Range = { 100, 2000 }, Increment = 50, Suffix = " studs", CurrentValue = 500, Flag = "MobMaxDist", Callback = function(v) Hub.MobESP.MaxDistance = v end })
 ESPRight:CreateSlider({ Name = "Mob Text Size", Range = { 8, 24 }, Increment = 1, Suffix = "px", CurrentValue = 14, Flag = "MobTextSize", Callback = function(v) Hub.MobESP.TextSize = v end })
+
+ESPLeft:CreateSection("NPC ESP")
+
+ESPLeft:CreateToggle({ Name = "Enable NPC ESP", Description = "Show dialog NPCs (lime green)", CurrentValue = false, Flag = "NPCESP", Callback = function(v) Hub.NPCESP.Enabled = v; if v then Hub.StartNPCESP() else Hub.StopNPCESP() end end })
+ESPLeft:CreateSlider({ Name = "NPC Max Distance", Range = { 100, 2000 }, Increment = 50, Suffix = " studs", CurrentValue = 500, Flag = "NPCMaxDist", Callback = function(v) Hub.NPCESP.MaxDistance = v end })
+ESPLeft:CreateSlider({ Name = "NPC Text Size", Range = { 8, 24 }, Increment = 1, Suffix = "px", CurrentValue = 14, Flag = "NPCTextSize", Callback = function(v) Hub.NPCESP.TextSize = v end })
+
+ESPRight:CreateSection("World Boss ESP")
+
+ESPRight:CreateToggle({ Name = "Enable Boss ESP", Description = "Purple text far, HP panel close", CurrentValue = false, Flag = "BossESP", Callback = function(v) Hub.BossESP.Enabled = v; if v then Hub.StartBossESP() else Hub.StopBossESP() end end })
+ESPRight:CreateSlider({ Name = "Boss Max Distance", Range = { 500, 5000 }, Increment = 100, Suffix = " studs", CurrentValue = 2000, Flag = "BossMaxDist", Callback = function(v) Hub.BossESP.MaxDistance = v end })
+ESPRight:CreateSlider({ Name = "Boss Panel Distance", Range = { 100, 1000 }, Increment = 50, Suffix = " studs", CurrentValue = 500, Flag = "BossTransDist", Callback = function(v) Hub.BossESP.TransitionDist = v end })
+ESPRight:CreateSlider({ Name = "Boss Text Size", Range = { 8, 24 }, Increment = 1, Suffix = "px", CurrentValue = 14, Flag = "BossTextSize", Callback = function(v) Hub.BossESP.TextSize = v end })
 end
 
 -- ================================================================
@@ -259,6 +272,7 @@ AFRight:CreateToggle({ Name = "Trinket ESP", CurrentValue = false, Flag = "Trink
 AFRight:CreateSection("Chakra Point Collector")
 
 local ChakraCollector = { Running = false, Thread = nil, Delay = 1.5 }
+Hub.ChakraCollector = ChakraCollector
 
 local function CollectChakraPoints()
     local char = LocalPlayer.Character; if not char then return end; local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
@@ -278,6 +292,7 @@ AFRight:CreateSlider({ Name = "Wait per Point", Range = { 0.5, 5 }, Increment = 
 AFRight:CreateSection("Rift Collector")
 
 local RiftCollector = { Running = false, Thread = nil, Delay = 1.5 }
+Hub.RiftCollector = RiftCollector
 
 local function CollectRifts()
     local char = LocalPlayer.Character; if not char then return end; local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
@@ -301,9 +316,7 @@ AFRight:CreateButton({ Name = "Buy Selected Item", Callback = function() task.sp
 AFRight:CreateSection("Bulk Sell")
 
 AFRight:CreateButton({ Name = "Sell All Trinkets", Callback = function() task.spawn(Hub.BulkSellTrinkets) end })
-local gemSellAmount = "0"
-AFRight:CreateInput({ Name = "Gem Sell Amount (2nd arg)", PlaceholderText = "0", Callback = function(v) gemSellAmount = v end })
-AFRight:CreateButton({ Name = "Sell All Gems", Callback = function() task.spawn(function() Hub.BulkSellGems(tonumber(gemSellAmount) or 0) end) end })
+AFRight:CreateButton({ Name = "Sell All Gems", Callback = function() task.spawn(Hub.BulkSellGems) end })
 AFRight:CreateButton({ Name = "Sell All Fruits", Callback = function() task.spawn(Hub.BulkSellFruits) end })
 
 AFLeft:CreateSection("Chakra Sense Safety")

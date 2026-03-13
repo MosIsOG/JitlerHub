@@ -60,38 +60,131 @@ Hub.ToggleFullBright = ToggleFullBright
 -- ================================================================
 -- BULK SELLER (Direct Remote)
 -- ================================================================
-local function BulkSellTrinkets()
-    local ok, err = pcall(function()
-        if Hub.RefreshDataFunction then Hub.RefreshDataFunction() end
-        if not Hub.DataFunction then
-            Hub.DataFunction = Hub.ReplicatedStorage:FindFirstChild("Events") and Hub.ReplicatedStorage:FindFirstChild("Events"):FindFirstChild("DataFunction")
-        end
-        if Hub.DataFunction then Hub.DataFunction:InvokeServer("SellingBulk", 5, "Trinket") end
-    end)
-    if ok then Notify("Bulk sold all Trinkets!", 2) else Notify("Sell failed: " .. tostring(err), 3) end
+local TRINKET_VALUES = {
+    ["Silver Enclosed Ring"] = 3, ["Silver Ring"] = 2, ["Silver Bracelet"] = 2,
+    ["Gold Enclosed Ring"] = 5, ["Gold Necklace"] = 5, ["Silver Necklace"] = 3,
+    ["Gold Bracelet"] = 3, ["Gold Ring"] = 5,
+}
+
+local function GetDataFunction()
+    if Hub.RefreshDataFunction then Hub.RefreshDataFunction() end
+    if not Hub.DataFunction then
+        Hub.DataFunction = Hub.ReplicatedStorage:FindFirstChild("Events") and Hub.ReplicatedStorage:FindFirstChild("Events"):FindFirstChild("DataFunction")
+    end
+    return Hub.DataFunction
 end
 
-local function BulkSellGems(amount)
-    amount = tonumber(amount) or 0
-    local ok, err = pcall(function()
-        if Hub.RefreshDataFunction then Hub.RefreshDataFunction() end
-        if not Hub.DataFunction then
-            Hub.DataFunction = Hub.ReplicatedStorage:FindFirstChild("Events") and Hub.ReplicatedStorage:FindFirstChild("Events"):FindFirstChild("DataFunction")
+local function ParseQuantityText(text)
+    if not text or text == "" then return 1 end
+    local num = text:match("x(%d+)")
+    if num then return tonumber(num) or 1 end
+    num = text:match("(%d+)")
+    if num then return tonumber(num) or 1 end
+    return 1
+end
+
+local function ScanInventorySlots()
+    local slots = {}
+    pcall(function()
+        local gui = LocalPlayer.PlayerGui
+        local clientGui = gui and gui:FindFirstChild("ClientGui")
+        local mainframe = clientGui and clientGui:FindFirstChild("Mainframe")
+        local loadout = mainframe and mainframe:FindFirstChild("Loadout")
+        if not loadout then return end
+        -- Scan InvSlot1..105 in InventoryScroll
+        local inv = loadout:FindFirstChild("Inventory")
+        local scroll = inv and inv:FindFirstChild("InventoryScroll")
+        if scroll then
+            for i = 1, 105 do
+                pcall(function()
+                    local slot = scroll:FindFirstChild("InvSlot" .. i)
+                    if not slot then return end
+                    local slotText = slot:FindFirstChild("SlotText")
+                    local itemName = slotText and slotText:IsA("TextLabel") and slotText.Text or ""
+                    if itemName == "" then return end
+                    local qty = 1
+                    pcall(function()
+                        local itemNum = slot:FindFirstChild("ItemNumber")
+                        local numLabel = itemNum and itemNum:FindFirstChild("Number")
+                        if numLabel and numLabel:IsA("TextLabel") and numLabel.Text ~= "" then qty = ParseQuantityText(numLabel.Text) end
+                    end)
+                    table.insert(slots, { name = itemName, quantity = qty })
+                end)
+            end
         end
-        if Hub.DataFunction then Hub.DataFunction:InvokeServer("SellingBulk", amount, "Gem") end
+        -- Scan Slot1..11 (equipped/quick slots)
+        for j = 1, 11 do
+            pcall(function()
+                local slot = loadout:FindFirstChild("Slot" .. j)
+                if not slot then return end
+                local slotText = slot:FindFirstChild("SlotText")
+                local itemName = slotText and slotText:IsA("TextLabel") and slotText.Text or ""
+                if itemName == "" then return end
+                local qty = 1
+                pcall(function()
+                    local itemNum = slot:FindFirstChild("ItemNumber")
+                    local numLabel = itemNum and itemNum:FindFirstChild("Number")
+                    if numLabel and numLabel:IsA("TextLabel") and numLabel.Text ~= "" then qty = ParseQuantityText(numLabel.Text) end
+                end)
+                table.insert(slots, { name = itemName, quantity = qty })
+            end)
+        end
     end)
-    if ok then Notify("Bulk sold Gems (arg: " .. tostring(amount) .. ")", 2) else Notify("Sell failed: " .. tostring(err), 3) end
+    return slots
+end
+
+local function CalculateGemBulkValue()
+    local total = 0
+    local slots = ScanInventorySlots()
+    for _, slot in ipairs(slots) do
+        if slot.name:find("Gem") then total = total + (10 * slot.quantity) end
+    end
+    return total
+end
+
+local function CalculateTrinketBulkValue()
+    local total = 0
+    local slots = ScanInventorySlots()
+    for _, slot in ipairs(slots) do
+        local val = TRINKET_VALUES[slot.name]
+        if val then total = total + (val * slot.quantity) end
+    end
+    return total
+end
+
+Hub.ScanInventorySlots = ScanInventorySlots
+Hub.CalculateGemBulkValue = CalculateGemBulkValue
+Hub.CalculateTrinketBulkValue = CalculateTrinketBulkValue
+
+local function BulkSellTrinkets()
+    local ok, err = pcall(function()
+        local df = GetDataFunction()
+        if not df then error("DataFunction not found") end
+        local total = CalculateTrinketBulkValue()
+        if total <= 0 then Notify("No sellable trinkets found in inventory", 2); return end
+        df:InvokeServer("SellingBulk", total, "Trinket")
+    end)
+    if ok then Notify("Bulk sold Trinkets!", 2) else Notify("Sell failed: " .. tostring(err), 3) end
+end
+
+local function BulkSellGems()
+    local ok, err = pcall(function()
+        local df = GetDataFunction()
+        if not df then error("DataFunction not found") end
+        local total = CalculateGemBulkValue()
+        if total <= 0 then Notify("No gems found in inventory", 2); return end
+        df:InvokeServer("SellingBulk", total, "Gem")
+    end)
+    if ok then Notify("Bulk sold Gems (value: " .. tostring(CalculateGemBulkValue()) .. ")", 2) else Notify("Sell failed: " .. tostring(err), 3) end
 end
 
 local function BulkSellFruits()
     local ok, err = pcall(function()
-        if Hub.RefreshDataFunction then Hub.RefreshDataFunction() end
-        if not Hub.DataFunction then
-            Hub.DataFunction = Hub.ReplicatedStorage:FindFirstChild("Events") and Hub.ReplicatedStorage:FindFirstChild("Events"):FindFirstChild("DataFunction")
-        end
+        local df = GetDataFunction()
+        if not df then error("DataFunction not found") end
         local fishTarget = nil
         pcall(function() fishTarget = workspace:GetChildren()[68] and workspace:GetChildren()[68]:FindFirstChild("HumanoidRootPart") end)
-        if Hub.DataFunction then Hub.DataFunction:InvokeServer("SellingBulk", 0, "Fruit", "Fish", fishTarget) end
+        df:InvokeServer("SellingBulk", 0, "Fruit", "Fish", fishTarget)
     end)
     if ok then Notify("Bulk sold all Fruits!", 2) else Notify("Sell failed: " .. tostring(err), 3) end
 end
@@ -535,6 +628,19 @@ local function GetActiveChakraCount()
     return count
 end
 
+local function IsSafeFarmContextActive()
+    -- Chakra Safety only activates when at least one farming system is running
+    if Hub.MissionSystem and Hub.MissionSystem.AutoEnabled then return true end
+    if Hub.BossFarm and Hub.BossFarm.Enabled then return true end
+    if Hub.AutoEye and Hub.AutoEye.Enabled then return true end
+    if Hub.AutoGripFarm and (Hub.AutoGripFarm.AltEnabled or Hub.AutoGripFarm.MainEnabled) then return true end
+    if Hub.AutoTrinket and Hub.AutoTrinket.Enabled then return true end
+    -- ChakraCollector and RiftCollector are stored on Hub by the UI module
+    if Hub.ChakraCollector and Hub.ChakraCollector.Running then return true end
+    if Hub.RiftCollector and Hub.RiftCollector.Running then return true end
+    return false
+end
+
 local function PauseFarms()
     local saved = {}
     -- Save mission target info for reattach
@@ -615,7 +721,8 @@ end
 local function ChakraSafetyLoop()
     while ChakraSafety.Enabled do
         local activeCount = GetActiveChakraCount()
-        if activeCount > 0 and not ChakraSafety.Hiding then
+        local contextActive = IsSafeFarmContextActive()
+        if activeCount > 0 and not ChakraSafety.Hiding and contextActive then
             -- Someone activated Chakra Sense - flee
             ChakraSafety.Hiding = true
             local char = LocalPlayer.Character

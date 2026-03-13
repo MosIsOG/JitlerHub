@@ -61,7 +61,7 @@ function Hub.TeleportTo(pos)
     local root = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Head"); if root then root.CFrame = CFrame.new(pos) end
 end
 
-local BASE = 'https://raw.githubusercontent.com/MosIsOG/JitlerHub/refs/heads/main/modules/'
+local BASE = 'https://raw.githubusercontent.com/MosIsOG/JitlerHub/refs/heads/master/modules/'
 loadstring(game:HttpGet(BASE .. 'esp.lua'))()
 loadstring(game:HttpGet(BASE .. 'combat.lua'))()
 loadstring(game:HttpGet(BASE .. 'movement.lua'))()

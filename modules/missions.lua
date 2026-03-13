@@ -438,23 +438,31 @@ local function ExecuteMissionCase(missionName)
         StopMissionFarm(); MissionSystem.ActiveMission = nil; return result
 
     elseif missionName == "Corrupted Point" then
-        -- Try FindNPCNear the marker first with partial name match
-        local targets = FindNPCNear(markerPos, 300, "Corrupt")
-        -- Fallback: broader workspace search with flexible name matching
-        if #targets == 0 then
-            for _, obj in ipairs(workspace:GetDescendants()) do
-                if obj:IsA("Model") and obj.Name:lower():find("corrupt") then
-                    local hum = obj:FindFirstChildOfClass("Humanoid")
-                    local root = obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChild("Head") or obj:FindFirstChildWhichIsA("BasePart")
-                    if hum and hum.Health > 0 and root then table.insert(targets, { model = obj, humanoid = hum, root = root }) end
+        -- Retry scan for CorruptedPoint near the marker
+        local targets = {}
+        for attempt = 1, 10 do
+            targets = FindNPCNear(markerPos, 300, "Corrupt")
+            if #targets == 0 then
+                for _, obj in ipairs(workspace:GetDescendants()) do
+                    if obj:IsA("Model") and obj.Name:lower():find("corrupt") then
+                        local hum = obj:FindFirstChildOfClass("Humanoid")
+                        local root = obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChild("Head") or obj:FindFirstChildWhichIsA("BasePart")
+                        if hum and hum.Health > 0 and root then table.insert(targets, { model = obj, humanoid = hum, root = root }) end
+                    end
                 end
             end
+            if #targets > 0 then break end
+            Notify("Waiting for Corrupted Point to spawn... (" .. attempt .. "/10)", 2)
+            task.wait(2)
         end
-        if #targets == 0 then Notify("Corrupted Point not found!", 3); MissionSystem.ActiveMission = nil; return "failed" end
+        if #targets == 0 then Notify("Corrupted Point not found after retries!", 3); MissionSystem.ActiveMission = nil; return "failed" end
         local char = LocalPlayer.Character; local lr = char and char:FindFirstChild("HumanoidRootPart")
         if lr then table.sort(targets, function(a, b) return (a.root.Position - lr.Position).Magnitude < (b.root.Position - lr.Position).Magnitude end) end
         local target = targets[1]
-        TeleportTo(target.root.Position + Vector3.new(0, -5, 0))
+        -- Use OuterShard as target position if present
+        local outerShard = target.model:FindFirstChild("OuterShard")
+        local targetPart = outerShard or target.root
+        TeleportTo(targetPart.Position + Vector3.new(0, -5, 0))
         task.wait(0.5)
         MissionFarmLoop(target, -5, 0.12)
         local result = WaitForMissionResult(180)
