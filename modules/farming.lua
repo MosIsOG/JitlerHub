@@ -62,7 +62,10 @@ Hub.ToggleFullBright = ToggleFullBright
 -- ================================================================
 local function BulkSellTrinkets()
     local ok, err = pcall(function()
-        Hub.RefreshDataFunction()
+        if Hub.RefreshDataFunction then Hub.RefreshDataFunction() end
+        if not Hub.DataFunction then
+            Hub.DataFunction = Hub.ReplicatedStorage:FindFirstChild("Events") and Hub.ReplicatedStorage:FindFirstChild("Events"):FindFirstChild("DataFunction")
+        end
         if Hub.DataFunction then Hub.DataFunction:InvokeServer("SellingBulk", 5, "Trinket") end
     end)
     if ok then Notify("Bulk sold all Trinkets!", 2) else Notify("Sell failed: " .. tostring(err), 3) end
@@ -71,7 +74,10 @@ end
 local function BulkSellGems(amount)
     amount = tonumber(amount) or 0
     local ok, err = pcall(function()
-        Hub.RefreshDataFunction()
+        if Hub.RefreshDataFunction then Hub.RefreshDataFunction() end
+        if not Hub.DataFunction then
+            Hub.DataFunction = Hub.ReplicatedStorage:FindFirstChild("Events") and Hub.ReplicatedStorage:FindFirstChild("Events"):FindFirstChild("DataFunction")
+        end
         if Hub.DataFunction then Hub.DataFunction:InvokeServer("SellingBulk", amount, "Gem") end
     end)
     if ok then Notify("Bulk sold Gems (arg: " .. tostring(amount) .. ")", 2) else Notify("Sell failed: " .. tostring(err), 3) end
@@ -79,7 +85,10 @@ end
 
 local function BulkSellFruits()
     local ok, err = pcall(function()
-        Hub.RefreshDataFunction()
+        if Hub.RefreshDataFunction then Hub.RefreshDataFunction() end
+        if not Hub.DataFunction then
+            Hub.DataFunction = Hub.ReplicatedStorage:FindFirstChild("Events") and Hub.ReplicatedStorage:FindFirstChild("Events"):FindFirstChild("DataFunction")
+        end
         local fishTarget = nil
         pcall(function() fishTarget = workspace:GetChildren()[68] and workspace:GetChildren()[68]:FindFirstChild("HumanoidRootPart") end)
         if Hub.DataFunction then Hub.DataFunction:InvokeServer("SellingBulk", 0, "Fruit", "Fish", fishTarget) end
