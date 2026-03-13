@@ -786,69 +786,39 @@ local function ToggleFullBright(enabled, level)
 end
 
 -- ================================================================
--- BULK SELLER
+-- GENERAL HELPERS
 -- ================================================================
-local MERCHANT_POS = Vector3.new(-2875.2, -134.4, -4763.4)
-
 local function PressE()
     pcall(function() VirtualInput:SendKeyEvent(true, Enum.KeyCode.E, false, game); task.wait(0.15); VirtualInput:SendKeyEvent(false, Enum.KeyCode.E, false, game) end)
-end
-local function Press3()
-    pcall(function() VirtualInput:SendKeyEvent(true, Enum.KeyCode.Three, false, game); task.wait(0.15); VirtualInput:SendKeyEvent(false, Enum.KeyCode.Three, false, game) end)
 end
 local function TeleportTo(pos)
     local char = LocalPlayer.Character; if not char then return end
     local root = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Head"); if root then root.CFrame = CFrame.new(pos) end
 end
 
+-- ================================================================
+-- BULK SELLER (Direct Remote)
+-- ================================================================
 local function BulkSellTrinkets()
-    TeleportTo(MERCHANT_POS); task.wait(1.5)
-    PressE(); task.wait(1) -- interact
-    PressE(); task.wait(0.5) -- first choice
-    PressE(); task.wait(0.5) -- select Trinkets
-    PressE(); task.wait(0.5) -- confirm sell
+    pcall(function()
+        if DataFunction then DataFunction:InvokeServer("SellingBulk", 5, "Trinket") end
+    end)
     Notify("Bulk sold all Trinkets!", 2)
 end
 
 local function BulkSellGems()
-    TeleportTo(MERCHANT_POS); task.wait(1.5)
-    PressE(); task.wait(1) -- interact
-    PressE(); task.wait(0.5) -- first choice
-    -- Click on Gems option (Dialog3_Option2)
     pcall(function()
-        local dialog = LocalPlayer.PlayerGui:FindFirstChild("ClientGui")
-        if dialog then dialog = dialog:FindFirstChild("Mainframe") end
-        if dialog then dialog = dialog:FindFirstChild("Loadout") end
-        if dialog then dialog = dialog:FindFirstChild("Dialog") end
-        if dialog then
-            local gemsOption = dialog:FindFirstChild("Dialog3_Option2")
-            if gemsOption then
-                if typeof(fireclick) == "function" then fireclick(gemsOption)
-                elseif typeof(firesignal) == "function" then firesignal(gemsOption.MouseButton1Click)
-                end
-            end
-        end
+        if DataFunction then DataFunction:InvokeServer("SellingBulk", 0, "Gem") end
     end)
-    task.wait(0.5)
-    PressE(); task.wait(0.5) -- confirm sell
     Notify("Bulk sold all Gems!", 2)
 end
 
 local function BulkSellFruits()
-    TeleportTo(MERCHANT_POS); task.wait(1.5)
-    -- Find Food Merchant
-    local foodMerchant = workspace:FindFirstChild("Food Merchant")
-    if foodMerchant then
-        local pos
-        pcall(function()
-            local part = foodMerchant:FindFirstChild("HumanoidRootPart") or foodMerchant:FindFirstChildWhichIsA("BasePart")
-            if part then pos = part.Position + Vector3.new(0, 0, 3) end
-        end)
-        if pos then TeleportTo(pos); task.wait(0.5) end
-    end
-    PressE(); task.wait(1) -- interact
-    Press3(); task.wait(0.5) -- press 3
-    Press3(); task.wait(0.5) -- press 3 again
+    pcall(function()
+        local fishTarget = nil
+        pcall(function() fishTarget = workspace:GetChildren()[68] and workspace:GetChildren()[68]:FindFirstChild("HumanoidRootPart") end)
+        if DataFunction then DataFunction:InvokeServer("SellingBulk", 0, "Fruit", "Fish", fishTarget) end
+    end)
     Notify("Bulk sold all Fruits!", 2)
 end
 
@@ -1189,7 +1159,7 @@ InitChakraDisplay()
 local function UpdateChakraDisplay()
     local objs = ChakraTracker.DrawingObjects; if not objs.bg then return end
     local ownerCount = 0; for _ in pairs(ChakraTracker.SenseOwners) do ownerCount = ownerCount + 1 end
-    local activeNames = {}; for name in pairs(ChakraTracker.ActiveUsers) do table.insert(activeNames, name) end
+    local activeNames = {}; for name in pairs(ChakraTracker.SenseOwners) do if ChakraTracker.ActiveUsers[name] then table.insert(activeNames, name) end end
     local vps = Camera.ViewportSize; local panelW = 300; local lineH = 18; local lines = 1 + (#activeNames > 0 and 1 or 0); local panelH = 10 + lines * lineH
     local px = vps.X / 2 - panelW / 2; local py = 4
     objs.bg.Position = Vector2.new(px, py); objs.bg.Size = Vector2.new(panelW, panelH)
@@ -1233,6 +1203,575 @@ end
 for _, p in ipairs(Players:GetPlayers()) do MonitorChakraPlayer(p) end
 Players.PlayerAdded:Connect(function(player) MonitorChakraPlayer(player); task.delay(2, ScanSenseOwners) end)
 Players.PlayerRemoving:Connect(function(player) if ChakraTracker.Connections[player] then for _, conn in ipairs(ChakraTracker.Connections[player]) do conn:Disconnect() end; ChakraTracker.Connections[player] = nil end; if ChakraTracker.ActiveUsers[player.Name] then StopChakraTracking(player) end; task.delay(1, ScanSenseOwners) end)
+
+-- ================================================================
+-- NOSTUN
+-- ================================================================
+local NoStun = { Enabled = false, Connections = {} }
+
+local function ForceStunnedOff(obj)
+    pcall(function()
+        if obj:IsA("BoolValue") then obj.Value = false
+        elseif obj:IsA("StringValue") then if obj.Value:upper() == "ON" then obj.Value = "OFF" end
+        elseif obj:IsA("NumberValue") or obj:IsA("IntValue") then if obj.Value ~= 0 then obj.Value = 0 end end
+    end)
+end
+
+local function WatchStunned(stunObj)
+    if not stunObj then return nil end
+    ForceStunnedOff(stunObj)
+    local conn = stunObj:GetPropertyChangedSignal("Value"):Connect(function()
+        if NoStun.Enabled then ForceStunnedOff(stunObj) end
+    end)
+    return conn
+end
+
+local function StartNoStun()
+    StopNoStun()
+    local function hookSettings()
+        local settings = pcall(function() return ReplicatedStorage:FindFirstChild("Settings") end) and ReplicatedStorage:FindFirstChild("Settings")
+        if not settings then return end
+        local pf = settings:FindFirstChild(LocalPlayer.Name); if not pf then return end
+        local stunned = pf:FindFirstChild("Stunned")
+        if stunned then
+            local c = WatchStunned(stunned)
+            if c then table.insert(NoStun.Connections, c) end
+        end
+        -- Watch for Stunned being recreated
+        local childConn = pf.ChildAdded:Connect(function(child)
+            if child.Name == "Stunned" and NoStun.Enabled then
+                ForceStunnedOff(child)
+                local c = WatchStunned(child)
+                if c then table.insert(NoStun.Connections, c) end
+            end
+        end)
+        table.insert(NoStun.Connections, childConn)
+    end
+    hookSettings()
+    -- Watch for Settings folder appearing
+    local settingsConn = ReplicatedStorage.ChildAdded:Connect(function(child)
+        if child.Name == "Settings" and NoStun.Enabled then task.wait(0.2); hookSettings() end
+    end)
+    table.insert(NoStun.Connections, settingsConn)
+end
+
+local function StopNoStun()
+    for _, c in ipairs(NoStun.Connections) do pcall(function() c:Disconnect() end) end
+    NoStun.Connections = {}
+end
+
+-- ================================================================
+-- BUY ITEMS (Direct Remote)
+-- ================================================================
+local BuyItemsData = {
+    { Name = "Onyx Resanagi", Price = 60, Workspace = "Onyx Resanagi3" },
+    { Name = "Golden Resanagi", Price = 40, Workspace = "Golden Resanagi1" },
+    { Name = "Silver Resanagi", Price = 25, Workspace = "Silver Resanagi3" },
+    { Name = "Silver Zabunagi", Price = 50, Workspace = "Silver Zabunagi" },
+    { Name = "Golden Zabunagi", Price = 70, Workspace = "Silver Zabunagi" },
+    { Name = "Onyx Zabunagi", Price = 90, Workspace = "Onyx Zabunagi" },
+}
+local BuyItemsLookup = {}
+local BuyItemNames = {}
+for _, item in ipairs(BuyItemsData) do BuyItemsLookup[item.Name] = item; table.insert(BuyItemNames, item.Name) end
+local SelectedBuyItem = BuyItemNames[1]
+
+local function BuySelectedItem()
+    local item = BuyItemsLookup[SelectedBuyItem]
+    if not item then Notify("No item selected!", 2); return end
+    local wsObj = workspace:FindFirstChild(item.Workspace)
+    if not wsObj then Notify("Shop NPC '" .. item.Workspace .. "' not found!", 3); return end
+    local ok, err = pcall(function()
+        DataFunction:InvokeServer("Pay", item.Price, item.Name, 1, wsObj)
+    end)
+    if ok then Notify("Bought: " .. item.Name, 2) else Notify("Buy failed: " .. tostring(err), 3) end
+end
+
+-- ================================================================
+-- MISSION SYSTEM
+-- ================================================================
+local MissionSystem = {
+    VillageName = nil,
+    Board = nil,
+    AvailableMissions = {},
+    SelectedMission = nil,
+    Cooldowns = {},
+    ActiveMission = nil,
+    AutoEnabled = false,
+    Thread = nil,
+    AnchorConn = nil,
+    AttackThread = nil,
+}
+
+local VALID_VILLAGES = { Snow = true, Sorythia = true, Rain = true, Durana = true, Rogue = true }
+
+local function GetPlayerVillage()
+    local team = LocalPlayer.Team
+    if not team then return nil end
+    local name = team.Name
+    if VALID_VILLAGES[name] then return name end
+    return nil
+end
+
+local function FindMissionBoard()
+    local village = GetPlayerVillage()
+    if not village then return nil, nil end
+    MissionSystem.VillageName = village
+    local boards = workspace:FindFirstChild("Mission Boards")
+    if not boards then return nil, village end
+    for _, board in ipairs(boards:GetChildren()) do
+        local attr = nil
+        pcall(function() attr = board:GetAttribute("Village") end)
+        if attr and attr == village then
+            MissionSystem.Board = board
+            return board, village
+        end
+    end
+    return nil, village
+end
+
+local function GetAvailableVillageMissions()
+    local board, village = FindMissionBoard()
+    if not village then return {} end
+    if not board then return {} end
+    local missions = {}
+    for _, child in ipairs(board:GetChildren()) do
+        local missionName = nil
+        pcall(function() missionName = child:GetAttribute("Mission") end)
+        if missionName and missionName ~= "" then
+            if not MissionSystem.Cooldowns[missionName] or tick() > MissionSystem.Cooldowns[missionName] then
+                table.insert(missions, missionName)
+            end
+        end
+    end
+    MissionSystem.AvailableMissions = missions
+    return missions
+end
+
+local function RefreshMissionBoard()
+    local missions = GetAvailableVillageMissions()
+    if #missions == 0 then
+        Notify("No available missions! (all on cooldown or no board)", 3)
+    else
+        Notify("Found " .. #missions .. " missions", 2)
+    end
+    return missions
+end
+
+-- Notification parser
+local function GetMissionNotifications()
+    local results = {}
+    pcall(function()
+        local gui = LocalPlayer.PlayerGui:FindFirstChild("ClientGui")
+        if not gui then return end
+        local mainframe = gui:FindFirstChild("Mainframe")
+        if not mainframe then return end
+        local notifFrame = mainframe:FindFirstChild("Notification")
+        if not notifFrame then return end
+        for i = 1, 3 do
+            local nf = notifFrame:FindFirstChild("Notif" .. i)
+            if nf then
+                local msg = nf:FindFirstChild("Message")
+                if msg and msg:IsA("TextLabel") and msg.Text ~= "" then
+                    table.insert(results, msg.Text)
+                end
+            end
+        end
+    end)
+    return results
+end
+
+local function CheckNotification(pattern)
+    for _, text in ipairs(GetMissionNotifications()) do
+        if text:find(pattern) then return true, text end
+    end
+    return false, nil
+end
+
+local function ParseCooldownFromNotif(text)
+    -- "You've already completed this mission. Please come back in X minutes"
+    local minutes = text:match("come back in (%d+)")
+    if minutes then return tonumber(minutes) * 60 end
+    local hours = text:match("come back in (%d+) hour")
+    if hours then return tonumber(hours) * 3600 end
+    return 300 -- default 5 min
+end
+
+-- Mission marker scanner (fixed)
+local function ScanMissionMarkersFixed()
+    local markers = {}
+    local debris = workspace:FindFirstChild("Debris"); if not debris then return markers end
+    local ml = debris:FindFirstChild("Mission Locations"); if not ml then return markers end
+    for _, villageFolder in ipairs(ml:GetChildren()) do
+        for _, child in ipairs(villageFolder:GetDescendants()) do
+            if child.Name == "MissionMarker" then
+                local parent = child.Parent
+                local pos = nil
+                -- Case 1: Parent is a Spawner
+                if parent and parent.Name == "Spawner" or (parent and parent:FindFirstChildWhichIsA("BasePart")) then
+                    pcall(function()
+                        if child:IsA("BasePart") then pos = child.Position
+                        elseif child:IsA("Attachment") then pos = child.WorldPosition
+                        elseif child:IsA("Model") then pos = child:GetPivot().Position
+                        else
+                            local bp = child:FindFirstChildWhichIsA("BasePart", true)
+                            if bp then pos = bp.Position end
+                        end
+                    end)
+                    if not pos then
+                        pcall(function()
+                            local bp = parent:FindFirstChildWhichIsA("BasePart", true)
+                            if bp then pos = bp.Position end
+                        end)
+                    end
+                end
+                -- Case 2: Parent is an NPC Model with Humanoid
+                if not pos and parent and parent:IsA("Model") and parent:FindFirstChildOfClass("Humanoid") then
+                    pcall(function()
+                        local root = parent:FindFirstChild("HumanoidRootPart") or parent:FindFirstChild("Head") or parent:FindFirstChildWhichIsA("BasePart")
+                        if root then pos = root.Position end
+                    end)
+                end
+                if pos then
+                    table.insert(markers, { name = villageFolder.Name .. "/" .. parent.Name, pos = pos, parent = parent })
+                end
+            end
+        end
+    end
+    return markers
+end
+
+local function GetNearestMissionMarker()
+    local markers = ScanMissionMarkersFixed()
+    if #markers == 0 then return nil end
+    local char = LocalPlayer.Character; if not char then return nil end
+    local root = char:FindFirstChild("HumanoidRootPart"); if not root then return nil end
+    local pp = root.Position
+    local nearest, minD = nil, math.huge
+    for _, m in ipairs(markers) do
+        local d = (pp - m.pos).Magnitude
+        if d < minD then minD = d; nearest = m end
+    end
+    return nearest
+end
+
+local function TeleportToNearestMissionMarker()
+    local m = GetNearestMissionMarker()
+    if not m then Notify("No mission markers found!", 2); return nil end
+    TeleportTo(m.pos); Notify("TP: " .. m.name, 2)
+    return m
+end
+
+-- Find NPC near a position with name filter
+local function FindNPCNear(pos, radius, nameFilter)
+    local found = {}
+    local function check(model)
+        if not model:IsA("Model") then return end
+        local hum = model:FindFirstChildOfClass("Humanoid"); if not hum or hum.Health <= 0 then return end
+        local root = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Head") or model:FindFirstChildWhichIsA("BasePart"); if not root then return end
+        if (root.Position - pos).Magnitude > radius then return end
+        if nameFilter then
+            if type(nameFilter) == "string" then
+                if not model.Name:find(nameFilter) then return end
+            elseif type(nameFilter) == "table" then
+                local match = false
+                for _, n in ipairs(nameFilter) do if model.Name == n then match = true; break end end
+                if not match then return end
+            end
+        end
+        table.insert(found, { model = model, humanoid = hum, root = root })
+    end
+    for _, fn in ipairs({"NPCs", "Mobs", "Enemies"}) do
+        local f = workspace:FindFirstChild(fn); if f then for _, m in ipairs(f:GetChildren()) do check(m) end end
+    end
+    for _, m in ipairs(workspace:GetChildren()) do check(m) end
+    return found
+end
+
+-- Wait for mission notification
+local function WaitForMissionResult(timeout)
+    timeout = timeout or 120
+    local start = tick()
+    while tick() - start < timeout do
+        local complete = CheckNotification("Mission Complete")
+        local failed = CheckNotification("Mission Failed")
+        local cooldown, cdText = CheckNotification("already completed this mission")
+        if complete then return "complete" end
+        if failed then return "failed" end
+        if cooldown then return "cooldown", cdText end
+        task.wait(0.5)
+    end
+    return "timeout"
+end
+
+-- Assign a mission from the board
+local function AssignMission(missionName)
+    local board = MissionSystem.Board
+    if not board then FindMissionBoard(); board = MissionSystem.Board end
+    if not board then Notify("No mission board!", 3); return false end
+    for _, child in ipairs(board:GetChildren()) do
+        local attr = nil; pcall(function() attr = child:GetAttribute("Mission") end)
+        if attr == missionName then
+            pcall(function()
+                local prox = child:FindFirstChildOfClass("ProximityPrompt")
+                if prox then
+                    local root = child:FindFirstChildWhichIsA("BasePart") or child:FindFirstChild("HumanoidRootPart")
+                    if root then TeleportTo(root.Position) end
+                    task.wait(0.5); fireproximityprompt(prox)
+                else
+                    local root = child:FindFirstChildWhichIsA("BasePart")
+                    if root then TeleportTo(root.Position); task.wait(0.5); PressE() end
+                end
+            end)
+            task.wait(1)
+            -- Check if already have a mission
+            if CheckNotification("You already have a mission") then return false end
+            local _, cdText = CheckNotification("already completed this mission")
+            if cdText then
+                local cdSec = ParseCooldownFromNotif(cdText)
+                MissionSystem.Cooldowns[missionName] = tick() + cdSec
+                return false
+            end
+            return true
+        end
+    end
+    return false
+end
+
+-- ================================================================
+-- MISSION CASE HANDLERS
+-- ================================================================
+
+-- Generic farm loop: attach above target and attack
+local function MissionFarmLoop(target, heightOffset, attackDelay)
+    attackDelay = attackDelay or 0.12
+    local model = target.model; local hum = target.humanoid
+
+    MissionSystem.AnchorConn = RunService.Heartbeat:Connect(function()
+        pcall(function()
+            if not MissionSystem.ActiveMission then return end
+            if not hum or not hum.Parent or hum.Health <= 0 then return end
+            local bossRoot = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Head") or model:FindFirstChildWhichIsA("BasePart"); if not bossRoot then return end
+            local char = LocalPlayer.Character; if not char then return end; local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
+            root.CFrame = CFrame.lookAt(bossRoot.Position + Vector3.new(0, heightOffset, 0), bossRoot.Position)
+        end)
+    end)
+
+    MissionSystem.AttackThread = task.spawn(function()
+        while MissionSystem.ActiveMission and hum and hum.Parent and hum.Health > 0 do
+            pcall(function()
+                if DataEvent then
+                    local br = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Head")
+                    if br then DataEvent:FireServer("Dash", "Sub", br.Position) end
+                    task.wait(0.05)
+                    DataEvent:FireServer("CheckMeleeHit", nil, "NormalAttack", false)
+                end
+            end)
+            task.wait(attackDelay)
+        end
+    end)
+end
+
+local function StopMissionFarm()
+    if MissionSystem.AnchorConn then MissionSystem.AnchorConn:Disconnect(); MissionSystem.AnchorConn = nil end
+    if MissionSystem.AttackThread then pcall(task.cancel, MissionSystem.AttackThread); MissionSystem.AttackThread = nil end
+end
+
+-- Monitor Knocked state for grip
+local function MonitorKnockedForGrip(model)
+    local settings = model:FindFirstChild("Settings")
+    if not settings then return end
+    local knocked = settings:FindFirstChild("Knocked")
+    if not knocked then return end
+    task.spawn(function()
+        while MissionSystem.ActiveMission and model and model.Parent do
+            pcall(function()
+                if knocked.Value == true or (type(knocked.Value) == "string" and knocked.Value:upper() == "ON") or (type(knocked.Value) == "number" and knocked.Value ~= 0) then
+                    if DataEvent then DataEvent:FireServer("Grip") end
+                end
+            end)
+            task.wait(0.3)
+        end
+    end)
+end
+
+local function ExecuteMissionCase(missionName)
+    MissionSystem.ActiveMission = missionName
+    StopMissionFarm()
+
+    -- Teleport to mission marker first
+    local marker = TeleportToNearestMissionMarker()
+    if not marker then
+        Notify("No mission marker for: " .. missionName, 3)
+        MissionSystem.ActiveMission = nil
+        return "failed"
+    end
+    task.wait(1.5)
+    local markerPos = marker.pos
+
+    if missionName == "Defeat a Boss" then
+        local targets = FindNPCNear(markerPos, 300, {"The Barbarian", "Barbarit The Rose"})
+        if #targets == 0 then Notify("Boss not found near marker!", 3); MissionSystem.ActiveMission = nil; return "failed" end
+        local target = targets[1]
+        MonitorKnockedForGrip(target.model)
+        MissionFarmLoop(target, 12, 0.12)
+        local result = WaitForMissionResult(180)
+        StopMissionFarm(); MissionSystem.ActiveMission = nil; return result
+
+    elseif missionName == "Bandit Camp" then
+        local function farmBandits()
+            for attempt = 1, 10 do
+                if not MissionSystem.ActiveMission then return "cancelled" end
+                if CheckNotification("Mission Complete") then return "complete" end
+                local targets = FindNPCNear(markerPos, 300, "Bandit")
+                if #targets == 0 then
+                    if CheckNotification("Mission Complete") then return "complete" end
+                    task.wait(1); continue
+                end
+                for _, target in ipairs(targets) do
+                    if not MissionSystem.ActiveMission then return "cancelled" end
+                    MissionFarmLoop(target, 10.75, 0.12)
+                    while MissionSystem.ActiveMission and target.humanoid and target.humanoid.Parent and target.humanoid.Health > 0 do task.wait(0.3) end
+                    StopMissionFarm()
+                    if CheckNotification("Mission Complete") then return "complete" end
+                end
+                task.wait(1)
+            end
+            return WaitForMissionResult(30)
+        end
+        local result = farmBandits()
+        StopMissionFarm(); MissionSystem.ActiveMission = nil; return result
+
+    elseif missionName == "Corrupted Point" then
+        local targets = {}
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            if obj:IsA("Model") and obj.Name == "CorruptedPoint" then
+                local hum = obj:FindFirstChildOfClass("Humanoid")
+                local root = obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChildWhichIsA("BasePart")
+                if hum and hum.Health > 0 and root then table.insert(targets, { model = obj, humanoid = hum, root = root }) end
+            end
+        end
+        if #targets == 0 then Notify("CorruptedPoint not found!", 3); MissionSystem.ActiveMission = nil; return "failed" end
+        -- Get nearest
+        local char = LocalPlayer.Character; local lr = char and char:FindFirstChild("HumanoidRootPart")
+        if lr then table.sort(targets, function(a, b) return (a.root.Position - lr.Position).Magnitude < (b.root.Position - lr.Position).Magnitude end) end
+        local target = targets[1]
+        TeleportTo(target.root.Position + Vector3.new(0, -5, 0))
+        task.wait(0.5)
+        MissionFarmLoop(target, -5, 0.12)
+        local result = WaitForMissionResult(180)
+        StopMissionFarm(); MissionSystem.ActiveMission = nil; return result
+
+    elseif missionName == "Cratos" then
+        local targets = FindNPCNear(markerPos, 300, {"Cratos"})
+        if #targets == 0 then Notify("Cratos not found near marker!", 3); MissionSystem.ActiveMission = nil; return "failed" end
+        MissionFarmLoop(targets[1], 10.75, 0.12)
+        local result = WaitForMissionResult(180)
+        StopMissionFarm(); MissionSystem.ActiveMission = nil; return result
+
+    elseif missionName == "Capture Manda" then
+        local targets = FindNPCNear(markerPos, 300, {"Manda"})
+        if #targets == 0 then Notify("Manda not found near marker!", 3); MissionSystem.ActiveMission = nil; return "failed" end
+        local target = targets[1]
+        -- Monitor Manda animations like LavaSnake
+        pcall(function()
+            local hum = target.humanoid; local animator = hum:FindFirstChildOfClass("Animator")
+            if animator then
+                local mandaConn
+                mandaConn = animator.AnimationPlayed:Connect(function(track)
+                    if not MissionSystem.ActiveMission then mandaConn:Disconnect(); return end
+                end)
+            end
+        end)
+        MissionFarmLoop(target, 38, 0.12)
+        local result = WaitForMissionResult(180)
+        StopMissionFarm(); MissionSystem.ActiveMission = nil; return result
+
+    elseif missionName == "Defeat a Bandit" then
+        local targets = FindNPCNear(markerPos, 300, "Bandit")
+        if #targets == 0 then Notify("Bandit not found near marker!", 3); MissionSystem.ActiveMission = nil; return "failed" end
+        MissionFarmLoop(targets[1], 10.75, 0.12)
+        local result = WaitForMissionResult(180)
+        StopMissionFarm(); MissionSystem.ActiveMission = nil; return result
+
+    elseif missionName == "Crate Delivery" then
+        -- Already at marker, fire remote
+        task.wait(0.5)
+        pcall(function() DataFunction:InvokeServer("Crate Delivery") end)
+        local result = WaitForMissionResult(30)
+        MissionSystem.ActiveMission = nil; return result
+
+    else
+        Notify("Unknown mission: " .. missionName, 3)
+        MissionSystem.ActiveMission = nil
+        return "unknown"
+    end
+end
+
+-- ================================================================
+-- AUTO MISSION
+-- ================================================================
+local function StopAutoMission()
+    MissionSystem.AutoEnabled = false
+    MissionSystem.ActiveMission = nil
+    StopMissionFarm()
+    if MissionSystem.Thread then pcall(task.cancel, MissionSystem.Thread); MissionSystem.Thread = nil end
+end
+
+local function StartAutoMission()
+    StopAutoMission()
+    MissionSystem.AutoEnabled = true
+    local village = GetPlayerVillage()
+    if not village then
+        Notify("You need to join a village for this feature!", 3)
+        MissionSystem.AutoEnabled = false
+        return
+    end
+    FindMissionBoard()
+
+    MissionSystem.Thread = task.spawn(function()
+        while MissionSystem.AutoEnabled do
+            local missions = GetAvailableVillageMissions()
+            if #missions == 0 then
+                Notify("All missions on cooldown!", 3)
+                MissionSystem.AutoEnabled = false
+                break
+            end
+
+            local missionToRun = MissionSystem.SelectedMission
+            if not missionToRun or not table.find(missions, missionToRun) then
+                missionToRun = missions[1]
+            end
+
+            Notify("AutoMission: " .. missionToRun, 2)
+
+            -- Try to assign mission
+            local assigned = AssignMission(missionToRun)
+            if not assigned then
+                if CheckNotification("You already have a mission") then
+                    -- Already have a mission, try to execute it
+                else
+                    Notify("Failed to assign: " .. missionToRun, 2)
+                    task.wait(2); continue
+                end
+            end
+            task.wait(1)
+
+            local result = ExecuteMissionCase(missionToRun)
+            if result == "complete" then
+                Notify("Mission complete: " .. missionToRun, 2)
+            elseif result == "failed" then
+                Notify("Mission failed: " .. missionToRun, 2)
+            elseif result == "cooldown" then
+                MissionSystem.Cooldowns[missionToRun] = tick() + 300
+                Notify("Mission on cooldown: " .. missionToRun, 2)
+            end
+
+            if not MissionSystem.AutoEnabled then break end
+            task.wait(3)
+        end
+    end)
+end
 
 -- ================================================================
 -- UI CREATION
@@ -1336,6 +1875,8 @@ MRight:CreateSlider({ Name = "Click Delay", Range = { 0.02, 0.5 }, Increment = 0
 
 MRight:CreateToggleWithKeybind({ Name = "Remote Attack Spam", Description = "Fire remote attack", CurrentValue = false, Flag = "RemoteAttack", Callback = function(v) RemoteAttackSpam.Enabled = v; if v then StartRemoteAttack() else StopRemoteAttack() end end }, { CurrentKeybind = "K", Flag = "RemoteAttackKey" })
 
+MRight:CreateToggle({ Name = "NoStun", Description = "Prevents stun from sticking", CurrentValue = false, Flag = "NoStun", Callback = function(v) NoStun.Enabled = v; if v then StartNoStun() else StopNoStun() end end })
+
 MRight:CreateSection("Protection")
 
 MRight:CreateToggleWithKeybind({ Name = "No Fall Damage", Description = "Prevent all fall damage", CurrentValue = false, Flag = "NoFall", Callback = function(v) NoFall.Enabled = v end }, { CurrentKeybind = "F7", Flag = "NoFallKey" })
@@ -1407,40 +1948,69 @@ end
 
 -- ----- Mission Markers -----
 SubInfo:CreateSection("Mission Markers")
-local MissionMarkers = { FoundMarkers = {} }
-
-local function IsMissionMarkerActive(mm)
-    local active = false
-    pcall(function() for _, c in ipairs(mm:GetChildren()) do local ok, val = pcall(function() return c.AlwaysOnTop end); if ok and val == true then active = true; break end end end)
-    return active
-end
-
-local function ScanMissionMarkers()
-    MissionMarkers.FoundMarkers = {}
-    local debris = workspace:FindFirstChild("Debris"); if not debris then return end
-    local ml = debris:FindFirstChild("Mission Locations"); if not ml then return end
-    for _, lf in ipairs(ml:GetChildren()) do
-        local spawners = lf:FindFirstChild("Spawners"); if not spawners then continue end
-        for i, spawner in ipairs(spawners:GetChildren()) do
-            local mm = spawner:FindFirstChild("MissionMarker"); if not mm or not IsMissionMarkerActive(mm) then continue end
-            local pos; pcall(function() pos = mm:IsA("BasePart") and mm.Position or mm:IsA("Model") and mm:GetPivot().Position or mm:IsA("Attachment") and mm.WorldPosition end)
-            if not pos then pcall(function() pos = (mm:FindFirstChildWhichIsA("BasePart", true) or spawner:FindFirstChildWhichIsA("BasePart", true)).Position end) end
-            if pos then table.insert(MissionMarkers.FoundMarkers, { name = Format("%s #%d", lf.Name, i), pos = pos }) end
-        end
-    end
-    Notify("Found " .. #MissionMarkers.FoundMarkers .. " markers", 2)
-end
 
 SubInfo:CreateButton({ Name = "TP to Nearest Mission", Callback = function()
-    ScanMissionMarkers(); if #MissionMarkers.FoundMarkers == 0 then return end
+    local markers = ScanMissionMarkersFixed(); if #markers == 0 then return end
     local char = LocalPlayer.Character; if not char then return end; local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
     local pp = root.Position; local nearest, minD = nil, math.huge
-    for _, m in ipairs(MissionMarkers.FoundMarkers) do local d = (pp - m.pos).Magnitude; if d < minD then minD = d; nearest = m end end
+    for _, m in ipairs(markers) do local d = (pp - m.pos).Magnitude; if d < minD then minD = d; nearest = m end end
     if nearest then TeleportTo(nearest.pos); Notify(nearest.name .. " (" .. math.floor(minD) .. " studs)", 2) end
 end })
+end -- SubInfo
 
--- ----- Chakra Point Collector -----
-SubInfo:CreateSection("Chakra Point Collector")
+-- ================================================================
+-- AUTOFARM TAB (two-column)
+-- ================================================================
+do
+local AFLeft, AFRight = AutoFarmTab:CreateDualPane()
+
+-- Left: Boss Farm + Eye Farm + Missions
+AFLeft:CreateSection("Boss Farm")
+
+AFLeft:CreateInput({ Name = "Weapon Name", PlaceholderText = "Onyx Resanagi", Callback = function(v) BossFarm.WeaponName = v end })
+AFLeft:CreateDropdown({ Name = "Select Boss", Options = { "Wooden Golem", "Hyuga Boss", "Lava Snake", "Haku Boss", "Barbarit The Rose", "Manda" }, CurrentOption = "Wooden Golem", Flag = "BossSelect", Callback = function(v) BossFarm.SelectedBoss = type(v) == "table" and v[1] or v end })
+AFLeft:CreateToggleWithKeybind({ Name = "Start Farm", Description = "Auto-attack selected boss", CurrentValue = false, Flag = "BossFarm", Callback = function(v) BossFarm.Enabled = v; if v then StartBossFarm() else StopBossFarm() end end }, { CurrentKeybind = "G", Flag = "BossFarmKey" })
+AFLeft:CreateSlider({ Name = "Attack Delay", Range = { 0.02, 0.5 }, Increment = 0.01, Suffix = "s", CurrentValue = 0.12, Flag = "BFAttackDelay", Callback = function(v) BossFarm.AttackDelay = v end })
+AFLeft:CreateToggle({ Name = "Auto Loot On Kill", CurrentValue = false, Flag = "BossAutoLoot", Callback = function(v) BossFarm.AutoLootOnKill = v end })
+
+AFLeft:CreateSection("Auto Eye Farm")
+
+AFLeft:CreateDropdown({ Name = "Select Eye", Options = { "Sharingan [Stage 1]", "Sharingan [Stage 2]", "Sharingan [Stage 3]", "Byakugan [Stage 1]", "Byakugan [Stage 2]", "Byakugan [Stage 3]", "Byakugan [Stage 4]" }, CurrentOption = "Sharingan [Stage 1]", Flag = "EyeSelect", Callback = function(v) AutoEye.SelectedItem = type(v) == "table" and v[1] or v end })
+AFLeft:CreateToggle({ Name = "Enable Auto Eye", CurrentValue = false, Flag = "AutoEye", Callback = function(v) AutoEye.Enabled = v; if v then if AutoEye.Thread then task.cancel(AutoEye.Thread) end; AutoEye.Thread = task.spawn(autoEyeLoop) else if AutoEye.Thread then task.cancel(AutoEye.Thread); AutoEye.Thread = nil end end end })
+
+AFLeft:CreateSection("Auto Mission")
+
+local missionDropdownRef
+local function RefreshMissionDropdownUI()
+    RefreshMissionBoard()
+    local opts = {}
+    for _, m in ipairs(MissionSystem.AvailableMissions) do table.insert(opts, m) end
+    if #opts == 0 then opts = {"No missions found"} end
+    if missionDropdownRef then pcall(function() missionDropdownRef:SetOptions(opts); missionDropdownRef:SetValue(opts[1]) end) end
+    MissionSystem.SelectedMission = opts[1]
+end
+
+missionDropdownRef = AFLeft:CreateDropdown({ Name = "Select Mission", Options = {"Click Refresh"}, CurrentOption = "Click Refresh", Flag = "MissionSelect", Callback = function(v) MissionSystem.SelectedMission = type(v) == "table" and v[1] or v end })
+AFLeft:CreateButton({ Name = "Refresh Missions", Callback = function() task.spawn(RefreshMissionDropdownUI) end })
+AFLeft:CreateToggle({ Name = "Auto Mission Farm", CurrentValue = false, Flag = "AutoMission", Callback = function(v) if v then StartAutoMission() else StopAutoMission() end end })
+AFLeft:CreateButton({ Name = "TP to Mission Marker", Callback = function() task.spawn(TeleportToNearestMissionMarker) end })
+
+-- Right: Grip Farm + Trinket + Collectors + Merchant
+AFRight:CreateSection("Auto Grip Farm")
+
+AFRight:CreateToggle({ Name = "Grip Alt Mode", CurrentValue = false, Flag = "GripAlt", Callback = function(v) AutoGripFarm.AltEnabled = v; if v then if AutoGripFarm.AltThread then task.cancel(AutoGripFarm.AltThread) end; AutoGripFarm.AltThread = task.spawn(autoGripAltLoop) else if AutoGripFarm.AltThread then task.cancel(AutoGripFarm.AltThread); AutoGripFarm.AltThread = nil end end end })
+AFRight:CreateToggle({ Name = "Grip Main Mode", CurrentValue = false, Flag = "GripMain", Callback = function(v) AutoGripFarm.MainEnabled = v; if v then if AutoGripFarm.MainThread then task.cancel(AutoGripFarm.MainThread) end; AutoGripFarm.MainThread = task.spawn(autoGripMainLoop) else if AutoGripFarm.MainThread then task.cancel(AutoGripFarm.MainThread); AutoGripFarm.MainThread = nil end end end })
+
+AFRight:CreateSection("Auto Trinket Pickup")
+
+AFRight:CreateToggle({ Name = "Enable Auto Trinket", CurrentValue = false, Flag = "AutoTrinket", Callback = function(v) AutoTrinket.Enabled = v; if v then StartAutoTrinket() else StopAutoTrinket() end end })
+AFRight:CreateSlider({ Name = "Scan Interval", Range = { 1, 30 }, Increment = 1, Suffix = "s", CurrentValue = 5, Flag = "TrinketScanInt", Callback = function(v) AutoTrinket.ScanInterval = v end })
+AFRight:CreateSlider({ Name = "Scan Radius", Range = { 20, 500 }, Increment = 10, Suffix = " studs", CurrentValue = 200, Flag = "TrinketRadius", Callback = function(v) AutoTrinket.ScanRadius = v end })
+AFRight:CreateToggle({ Name = "Teleport to Trinket", CurrentValue = true, Flag = "TrinketTP", Callback = function(v) AutoTrinket.TeleportToTrinket = v end })
+AFRight:CreateToggle({ Name = "Trinket ESP", CurrentValue = false, Flag = "TrinketESP", Callback = function(v) TrinketESP.Enabled = v; if v then StartTrinketESP() else StopTrinketESP() end end })
+
+AFRight:CreateSection("Chakra Point Collector")
+
 local ChakraCollector = { Running = false, Thread = nil, Delay = 1.5 }
 
 local function CollectChakraPoints()
@@ -1455,11 +2025,11 @@ local function CollectChakraPoints()
     ChakraCollector.Running = false; Notify("Chakra collection complete!", 2)
 end
 
-SubInfo:CreateToggle({ Name = "Auto Collect Chakra", CurrentValue = false, Flag = "ChakraCollect", Callback = function(v) ChakraCollector.Running = v; if v then if ChakraCollector.Thread then task.cancel(ChakraCollector.Thread) end; ChakraCollector.Thread = task.spawn(CollectChakraPoints) else if ChakraCollector.Thread then task.cancel(ChakraCollector.Thread); ChakraCollector.Thread = nil end end end })
-SubInfo:CreateSlider({ Name = "Wait per Point", Range = { 0.5, 5 }, Increment = 0.1, Suffix = "s", CurrentValue = 1.5, Flag = "ChakraDelay", Callback = function(v) ChakraCollector.Delay = v end })
+AFRight:CreateToggle({ Name = "Auto Collect Chakra", CurrentValue = false, Flag = "ChakraCollect", Callback = function(v) ChakraCollector.Running = v; if v then if ChakraCollector.Thread then task.cancel(ChakraCollector.Thread) end; ChakraCollector.Thread = task.spawn(CollectChakraPoints) else if ChakraCollector.Thread then task.cancel(ChakraCollector.Thread); ChakraCollector.Thread = nil end end end })
+AFRight:CreateSlider({ Name = "Wait per Point", Range = { 0.5, 5 }, Increment = 0.1, Suffix = "s", CurrentValue = 1.5, Flag = "ChakraDelay", Callback = function(v) ChakraCollector.Delay = v end })
 
--- ----- Rift Collector -----
-SubInfo:CreateSection("Rift Collector")
+AFRight:CreateSection("Rift Collector")
+
 local RiftCollector = { Running = false, Thread = nil, Delay = 1.5 }
 
 local function CollectRifts()
@@ -1473,58 +2043,23 @@ local function CollectRifts()
     RiftCollector.Running = false; Notify("Rift collection complete!", 2)
 end
 
-SubInfo:CreateToggle({ Name = "Auto Collect Rifts", CurrentValue = false, Flag = "RiftCollect", Callback = function(v) RiftCollector.Running = v; if v then if RiftCollector.Thread then task.cancel(RiftCollector.Thread) end; RiftCollector.Thread = task.spawn(CollectRifts) else if RiftCollector.Thread then task.cancel(RiftCollector.Thread); RiftCollector.Thread = nil end end end })
-SubInfo:CreateSlider({ Name = "Wait per Rift", Range = { 0.5, 5 }, Increment = 0.1, Suffix = "s", CurrentValue = 1.5, Flag = "RiftDelay", Callback = function(v) RiftCollector.Delay = v end })
-end -- SubInfo
+AFRight:CreateToggle({ Name = "Auto Collect Rifts", CurrentValue = false, Flag = "RiftCollect", Callback = function(v) RiftCollector.Running = v; if v then if RiftCollector.Thread then task.cancel(RiftCollector.Thread) end; RiftCollector.Thread = task.spawn(CollectRifts) else if RiftCollector.Thread then task.cancel(RiftCollector.Thread); RiftCollector.Thread = nil end end end })
+AFRight:CreateSlider({ Name = "Wait per Rift", Range = { 0.5, 5 }, Increment = 0.1, Suffix = "s", CurrentValue = 1.5, Flag = "RiftDelay", Callback = function(v) RiftCollector.Delay = v end })
 
--- ================================================================
--- AUTOFARM TAB (two-column)
--- ================================================================
-do
-local AFLeft, AFRight = AutoFarmTab:CreateDualPane()
+AFRight:CreateSection("Buy Items")
 
--- Left: Boss Farm + Eye Farm
-AFLeft:CreateSection("Boss Farm")
+AFRight:CreateDropdown({ Name = "Select Item", Options = BuyItemNames, CurrentOption = BuyItemNames[1], Flag = "BuyItemSelect", Callback = function(v) SelectedBuyItem = type(v) == "table" and v[1] or v end })
+AFRight:CreateButton({ Name = "Buy Selected Item", Callback = function() task.spawn(BuySelectedItem) end })
 
-AFLeft:CreateInput({ Name = "Weapon Name", PlaceholderText = "Onyx Resanagi", Callback = function(v) BossFarm.WeaponName = v end })
-AFLeft:CreateDropdown({ Name = "Select Boss", Options = { "Wooden Golem", "Hyuga Boss", "Lava Snake", "Haku Boss", "Barbarit The Rose", "Manda" }, CurrentOption = "Wooden Golem", Flag = "BossSelect", Callback = function(v) BossFarm.SelectedBoss = type(v) == "table" and v[1] or v end })
-AFLeft:CreateToggleWithKeybind({ Name = "Start Farm", Description = "Auto-attack selected boss", CurrentValue = false, Flag = "BossFarm", Callback = function(v) BossFarm.Enabled = v; if v then StartBossFarm() else StopBossFarm() end end }, { CurrentKeybind = "G", Flag = "BossFarmKey" })
-AFLeft:CreateSlider({ Name = "Attack Delay", Range = { 0.02, 0.5 }, Increment = 0.01, Suffix = "s", CurrentValue = 0.12, Flag = "BFAttackDelay", Callback = function(v) BossFarm.AttackDelay = v end })
-AFLeft:CreateToggle({ Name = "Auto Loot On Kill", CurrentValue = false, Flag = "BossAutoLoot", Callback = function(v) BossFarm.AutoLootOnKill = v end })
+AFRight:CreateSection("Bulk Sell")
 
-AFLeft:CreateSection("Auto Eye Farm")
-
-AFLeft:CreateDropdown({ Name = "Select Eye", Options = { "Sharingan [Stage 1]", "Sharingan [Stage 2]", "Sharingan [Stage 3]", "Byakugan [Stage 1]", "Byakugan [Stage 2]", "Byakugan [Stage 3]", "Byakugan [Stage 4]" }, CurrentOption = "Sharingan [Stage 1]", Flag = "EyeSelect", Callback = function(v) AutoEye.SelectedItem = type(v) == "table" and v[1] or v end })
-AFLeft:CreateToggle({ Name = "Enable Auto Eye", CurrentValue = false, Flag = "AutoEye", Callback = function(v) AutoEye.Enabled = v; if v then if AutoEye.Thread then task.cancel(AutoEye.Thread) end; AutoEye.Thread = task.spawn(autoEyeLoop) else if AutoEye.Thread then task.cancel(AutoEye.Thread); AutoEye.Thread = nil end end end })
-
--- Right: Grip Farm + Trinket + Merchant
-AFRight:CreateSection("Auto Grip Farm")
-
-AFRight:CreateToggle({ Name = "Grip Alt Mode", CurrentValue = false, Flag = "GripAlt", Callback = function(v) AutoGripFarm.AltEnabled = v; if v then if AutoGripFarm.AltThread then task.cancel(AutoGripFarm.AltThread) end; AutoGripFarm.AltThread = task.spawn(autoGripAltLoop) else if AutoGripFarm.AltThread then task.cancel(AutoGripFarm.AltThread); AutoGripFarm.AltThread = nil end end end })
-AFRight:CreateToggle({ Name = "Grip Main Mode", CurrentValue = false, Flag = "GripMain", Callback = function(v) AutoGripFarm.MainEnabled = v; if v then if AutoGripFarm.MainThread then task.cancel(AutoGripFarm.MainThread) end; AutoGripFarm.MainThread = task.spawn(autoGripMainLoop) else if AutoGripFarm.MainThread then task.cancel(AutoGripFarm.MainThread); AutoGripFarm.MainThread = nil end end end })
-
-AFRight:CreateSection("Auto Trinket Pickup")
-
-AFRight:CreateToggle({ Name = "Enable Auto Trinket", CurrentValue = false, Flag = "AutoTrinket", Callback = function(v) AutoTrinket.Enabled = v; if v then StartAutoTrinket() else StopAutoTrinket() end end })
-AFRight:CreateSlider({ Name = "Scan Interval", Range = { 1, 30 }, Increment = 1, Suffix = "s", CurrentValue = 5, Flag = "TrinketScanInt", Callback = function(v) AutoTrinket.ScanInterval = v end })
-AFRight:CreateSlider({ Name = "Scan Radius", Range = { 20, 500 }, Increment = 10, Suffix = " studs", CurrentValue = 200, Flag = "TrinketRadius", Callback = function(v) AutoTrinket.ScanRadius = v end })
-AFRight:CreateToggle({ Name = "Teleport to Trinket", CurrentValue = true, Flag = "TrinketTP", Callback = function(v) AutoTrinket.TeleportToTrinket = v end })
-AFRight:CreateToggle({ Name = "Trinket ESP", CurrentValue = false, Flag = "TrinketESP", Callback = function(v) TrinketESP.Enabled = v; if v then StartTrinketESP() else StopTrinketESP() end end })
-
-AFRight:CreateSection("Merchant Sales")
-
-AFRight:CreateParagraph({ Title = "Merchant Location", Content = "Teleports to merchant at (-2875, -134, -4763).\nInteracts automatically with dialog choices." })
-AFRight:CreateButton({ Name = "Bulk Sell All Trinkets", Callback = function() task.spawn(BulkSellTrinkets) end })
-AFRight:CreateButton({ Name = "Bulk Sell All Gems", Callback = function() task.spawn(BulkSellGems) end })
-
-AFRight:CreateSection("Food Merchant Sales")
-
-AFRight:CreateParagraph({ Title = "Food Merchant", Content = "Teleports to Food Merchant.\nPresses '3' twice to sell all fruits." })
-AFRight:CreateButton({ Name = "Bulk Sell All Fruits", Callback = function() task.spawn(BulkSellFruits) end })
+AFRight:CreateButton({ Name = "Sell All Trinkets", Callback = function() task.spawn(BulkSellTrinkets) end })
+AFRight:CreateButton({ Name = "Sell All Gems", Callback = function() task.spawn(BulkSellGems) end })
+AFRight:CreateButton({ Name = "Sell All Fruits", Callback = function() task.spawn(BulkSellFruits) end })
 end -- AutoFarm
 
 -- ================================================================
 -- FOOTER
 -- ================================================================
-Notify("Jitler Hub v2.0 loaded!", 3)
-print("=== Jitler Hub v2.0 Loaded ===")
+Notify("Jitler Hub v2.1 loaded!", 3)
+print("=== Jitler Hub v2.1 Loaded ===")
