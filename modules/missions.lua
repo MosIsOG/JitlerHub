@@ -446,19 +446,23 @@ local function ExecuteMissionCase(missionName)
 
     elseif missionName == "Corrupted Point" then
         -- CorruptedPoint is a Model in workspace with Health (NumberValue), Destroyed (BoolValue), no Humanoid
+        -- After teleporting to marker, find the nearest CorruptedPoint, teleport to it with -10 offset, and M1 spam
         local char = LocalPlayer.Character; local lr = char and char:FindFirstChild("HumanoidRootPart")
         local playerPos = lr and lr.Position or markerPos
         local cpModel = nil
         for attempt = 1, 15 do
+            local bestDist = math.huge
             pcall(function()
                 for _, obj in ipairs(workspace:GetChildren()) do
-                    if cpModel then break end
                     if obj:IsA("Model") and obj.Name == "CorruptedPoint" then
                         local healthVal = obj:FindFirstChild("Health")
                         local destroyed = obj:FindFirstChild("Destroyed")
                         if healthVal and (not destroyed or destroyed.Value ~= true) then
                             local part = obj:FindFirstChildWhichIsA("BasePart")
-                            if part then cpModel = obj end
+                            if part then
+                                local dist = (part.Position - playerPos).Magnitude
+                                if dist < bestDist then bestDist = dist; cpModel = obj end
+                            end
                         end
                     end
                 end
@@ -468,17 +472,17 @@ local function ExecuteMissionCase(missionName)
             task.wait(2)
         end
         if not cpModel then Notify("Corrupted Point not found after retries!", 3); MissionSystem.ActiveMission = nil; return "failed" end
-        -- Teleport to it and attack it with remote spam
+        -- Teleport to it with -10 Y offset
         local cpPart = cpModel:FindFirstChildWhichIsA("BasePart")
-        if cpPart then TeleportTo(cpPart.Position + Vector3.new(0, 2, 0)); task.wait(0.5) end
+        if cpPart then TeleportTo(cpPart.Position + Vector3.new(0, -10, 0)); task.wait(0.5) end
         local healthVal = cpModel:FindFirstChild("Health")
-        -- Anchor on top and spam attack until Health reaches 0 or Destroyed
+        -- Anchor with -10 offset and M1 spam until Health reaches 0 or Destroyed
         MissionSystem.AnchorConn = RunService.Heartbeat:Connect(function()
             pcall(function()
                 if not MissionSystem.ActiveMission or not cpModel or not cpModel.Parent then return end
                 local part = cpModel:FindFirstChildWhichIsA("BasePart"); if not part then return end
                 local c = LocalPlayer.Character; if not c then return end; local root = c:FindFirstChild("HumanoidRootPart"); if not root then return end
-                root.CFrame = CFrame.new(part.Position + Vector3.new(0, 2, 0))
+                root.CFrame = CFrame.new(part.Position + Vector3.new(0, -10, 0))
             end)
         end)
         MissionSystem.AttackThread = task.spawn(function()
@@ -490,9 +494,6 @@ local function ExecuteMissionCase(missionName)
                 if Hub.ChakraSafety and Hub.ChakraSafety.Hiding then task.wait(0.5); continue end
                 pcall(function()
                     if Hub.DataEvent then
-                        local part = cpModel:FindFirstChildWhichIsA("BasePart")
-                        if part then Hub.DataEvent:FireServer("Dash", "Sub", part.Position) end
-                        task.wait(0.05)
                         Hub.DataEvent:FireServer("CheckMeleeHit", nil, "NormalAttack", false)
                     end
                 end)
