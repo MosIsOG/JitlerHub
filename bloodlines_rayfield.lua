@@ -1243,12 +1243,13 @@ local Window = JitlerUI:CreateWindow({
     LoadingTitle = "Jitler Hub",
     LoadingSubtitle = "Loading modules...",
     ConfigurationSaving = { Enabled = true, FolderName = "JitlerHub", FileName = "Config" },
+    SettingsIcon = "rbxassetid://7734068557",
 })
 
 -- Tabs
-local ESPTab = Window:CreateTab({ Name = "ESP", Icon = "rbxassetid://7733960981" })
+local ESPTab = Window:CreateTab({ Name = "ESP", Icon = "rbxassetid://6523858394" })
 local MainTab = Window:CreateTab({ Name = "Main", Icon = "rbxassetid://7734053495" })
-local AutoFarmTab = Window:CreateTab({ Name = "AutoFarm", Icon = "rbxassetid://7734076001" })
+local AutoFarmTab = Window:CreateTab({ Name = "AutoFarm", Icon = "rbxassetid://111380546906150" })
 
 -- Main Sub-Tabs
 local SubMain = MainTab:CreateSubTab("Main")
