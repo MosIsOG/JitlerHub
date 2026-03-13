@@ -25,10 +25,10 @@ local Window = JitlerUI:CreateWindow({
 local MainTab = Window:CreateTab({ Name = "Main", Icon = "rbxassetid://11347112400" })
 local ESPTab = Window:CreateTab({ Name = "ESP", Icon = "rbxassetid://6523858394" })
 local AutoFarmTab = Window:CreateTab({ Name = "AutoFarm", Icon = "rbxassetid://130840043704422" })
+local TeleportTab = Window:CreateTab({ Name = "Teleports", Icon = "rbxassetid://139799091866771" })
 
 local SubMain = MainTab:CreateSubTab("Main")
 local SubQOL = MainTab:CreateSubTab("Misc")
-local SubInfo = MainTab:CreateSubTab("Teleports")
 
 -- ================================================================
 -- ESP TAB
@@ -83,13 +83,6 @@ ESPLeft:CreateSection("NPC ESP")
 ESPLeft:CreateToggle({ Name = "Enable NPC ESP", Description = "Show dialog NPCs (lime green)", CurrentValue = false, Flag = "NPCESP", Callback = function(v) Hub.NPCESP.Enabled = v; if v then Hub.StartNPCESP() else Hub.StopNPCESP() end end })
 ESPLeft:CreateSlider({ Name = "NPC Max Distance", Range = { 100, 2000 }, Increment = 50, Suffix = " studs", CurrentValue = 500, Flag = "NPCMaxDist", Callback = function(v) Hub.NPCESP.MaxDistance = v end })
 ESPLeft:CreateSlider({ Name = "NPC Text Size", Range = { 8, 24 }, Increment = 1, Suffix = "px", CurrentValue = 14, Flag = "NPCTextSize", Callback = function(v) Hub.NPCESP.TextSize = v end })
-
-ESPRight:CreateSection("World Boss ESP")
-
-ESPRight:CreateToggle({ Name = "Enable Boss ESP", Description = "Purple text far, HP panel close", CurrentValue = false, Flag = "BossESP", Callback = function(v) Hub.BossESP.Enabled = v; if v then Hub.StartBossESP() else Hub.StopBossESP() end end })
-ESPRight:CreateSlider({ Name = "Boss Max Distance", Range = { 500, 5000 }, Increment = 100, Suffix = " studs", CurrentValue = 2000, Flag = "BossMaxDist", Callback = function(v) Hub.BossESP.MaxDistance = v end })
-ESPRight:CreateSlider({ Name = "Boss Panel Distance", Range = { 100, 1000 }, Increment = 50, Suffix = " studs", CurrentValue = 500, Flag = "BossTransDist", Callback = function(v) Hub.BossESP.TransitionDist = v end })
-ESPRight:CreateSlider({ Name = "Boss Text Size", Range = { 8, 24 }, Increment = 1, Suffix = "px", CurrentValue = 14, Flag = "BossTextSize", Callback = function(v) Hub.BossESP.TextSize = v end })
 end
 
 -- ================================================================
@@ -154,26 +147,32 @@ QRight:CreateSection("Utility")
 QRight:CreateButton({ Name = "Reset Character", Callback = function() local char = LocalPlayer.Character; if char and char:FindFirstChild("Humanoid") then char.Humanoid.Health = 0; task.wait(1); char:BreakJoints() end end })
 QRight:CreateButton({ Name = "Random Server Hop", Callback = function() Hub.DoServerHop("random") end })
 QRight:CreateButton({ Name = "Low Player Server", Callback = function() Hub.DoServerHop("min") end })
+
+QRight:CreateSection("Hitbox Extender")
+
+QRight:CreateToggle({ Name = "Enable Hitbox Extender", Description = "Extend target HumanoidRootPart size", CurrentValue = false, Flag = "HitboxExtender", Callback = function(v) Hub.HitboxExtender.Enabled = v; if v then Hub.StartHitbox() else Hub.StopHitbox() end end })
+QRight:CreateSlider({ Name = "Hitbox Size", Range = { 2, 10 }, Increment = 0.5, Suffix = " studs", CurrentValue = 5, Flag = "HitboxSize", Callback = function(v) Hub.HitboxExtender.Size = v end })
+QRight:CreateToggle({ Name = "Show Hitbox Radius", Description = "Red sphere indicator on targets", CurrentValue = false, Flag = "ShowHitboxRadius", Callback = function(v) Hub.HitboxExtender.ShowRadius = v end })
 end
 
 -- ================================================================
--- MAIN TAB > Teleports
+-- TELEPORT TAB
 -- ================================================================
 do
-SubInfo:CreateSection("Current Position")
+TeleportTab:CreateSection("Current Position")
 
-local CoordLabel = SubInfo:CreateLabel("X: 0, Y: 0, Z: 0")
+local CoordLabel = TeleportTab:CreateLabel("X: 0, Y: 0, Z: 0")
 RunService.RenderStepped:Connect(function()
     local char = LocalPlayer.Character
     if char then local root = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Head"); if root then CoordLabel:Set(Format("X: %.1f, Y: %.1f, Z: %.1f", root.Position.X, root.Position.Y, root.Position.Z)) else CoordLabel:Set("No character") end
     else CoordLabel:Set("No character") end
 end)
 
-SubInfo:CreateButton({ Name = "Copy Position as Vector3", Callback = function()
+TeleportTab:CreateButton({ Name = "Copy Position as Vector3", Callback = function()
     local char = LocalPlayer.Character; if not char then return end; local root = char:FindFirstChild("HumanoidRootPart"); if root then local p = root.Position; setclipboard(Format("Vector3.new(%.1f, %.1f, %.1f)", p.X, p.Y, p.Z)); Notify("Copied!", 2) end
 end })
 
-SubInfo:CreateSection("Quick Teleports")
+TeleportTab:CreateSection("Quick Teleports")
 local TeleportLocations = {
     { Name = "Wood Boss", Pos = Vector3.new(-4708.4, 336.9, -2986.2) }, { Name = "Sorythia Village", Pos = Vector3.new(-113.2, 50.9, -283.8) },
     { Name = "Lava Snake", Pos = Vector3.new(-547.6, -541.7, -1281.8) }, { Name = "Biyo Bay", Pos = Vector3.new(-598.9, -178.6, -464.3) },
@@ -183,12 +182,12 @@ local TeleportLocations = {
     { Name = "Merchant", Pos = Vector3.new(-2875.2, -134.4, -4763.4) },
 }
 for _, loc in ipairs(TeleportLocations) do
-    SubInfo:CreateButton({ Name = loc.Name, Callback = function() TeleportTo(loc.Pos); Notify("TP: " .. loc.Name, 2) end })
+    TeleportTab:CreateButton({ Name = loc.Name, Callback = function() TeleportTo(loc.Pos); Notify("TP: " .. loc.Name, 2) end })
 end
 
-SubInfo:CreateSection("Mission Markers")
+TeleportTab:CreateSection("Mission Markers")
 
-SubInfo:CreateButton({ Name = "TP to Nearest Mission", Callback = function()
+TeleportTab:CreateButton({ Name = "TP to Nearest Mission", Callback = function()
     local markers = Hub.ScanMissionMarkersFixed(); if #markers == 0 then return end
     local char = LocalPlayer.Character; if not char then return end; local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
     local pp = root.Position; local nearest, minD = nil, math.huge
@@ -206,15 +205,15 @@ local AFLeft, AFRight = AutoFarmTab:CreateDualPane()
 AFLeft:CreateSection("Boss Farm")
 
 AFLeft:CreateInput({ Name = "Weapon Name", PlaceholderText = "Onyx Resanagi", Callback = function(v) Hub.BossFarm.WeaponName = v end })
-AFLeft:CreateDropdown({ Name = "Select Boss", Options = { "Wooden Golem", "Hyuga Boss", "Lava Snake", "Haku Boss", "Barbarit The Rose", "Manda" }, CurrentOption = "Wooden Golem", Flag = "BossSelect", Callback = function(v) Hub.BossFarm.SelectedBoss = type(v) == "table" and v[1] or v end })
+AFLeft:CreateDropdown({ Name = "Select Boss", Options = { "Wooden Golem", "Hyuga Boss", "Lava Snake", "Haku Boss", "Barbarit The Rose", "Manda", "Tairock" }, CurrentOption = "Wooden Golem", Flag = "BossSelect", Callback = function(v) Hub.BossFarm.SelectedBoss = type(v) == "table" and v[1] or v end })
 AFLeft:CreateToggleWithKeybind({ Name = "Start Farm", Description = "Auto-attack selected boss", CurrentValue = false, Flag = "BossFarm", Callback = function(v) Hub.BossFarm.Enabled = v; if v then Hub.StartBossFarm() else Hub.StopBossFarm() end end }, { CurrentKeybind = "G", Flag = "BossFarmKey" })
 AFLeft:CreateSlider({ Name = "Attack Delay", Range = { 0.02, 0.5 }, Increment = 0.01, Suffix = "s", CurrentValue = 0.12, Flag = "BFAttackDelay", Callback = function(v) Hub.BossFarm.AttackDelay = v end })
 AFLeft:CreateToggle({ Name = "Auto Loot On Kill", CurrentValue = false, Flag = "BossAutoLoot", Callback = function(v) Hub.BossFarm.AutoLootOnKill = v end })
 
-AFLeft:CreateSection("Auto Eye Farm")
+AFLeft:CreateSection("Auto Mode Farm")
 
-AFLeft:CreateDropdown({ Name = "Select Eye", Options = { "Sharingan [Stage 1]", "Sharingan [Stage 2]", "Sharingan [Stage 3]", "Byakugan [Stage 1]", "Byakugan [Stage 2]", "Byakugan [Stage 3]", "Byakugan [Stage 4]" }, CurrentOption = "Sharingan [Stage 1]", Flag = "EyeSelect", Callback = function(v) Hub.AutoEye.SelectedItem = type(v) == "table" and v[1] or v end })
-AFLeft:CreateToggle({ Name = "Enable Auto Eye", CurrentValue = false, Flag = "AutoEye", Callback = function(v) Hub.AutoEye.Enabled = v; if v then if Hub.AutoEye.Thread then task.cancel(Hub.AutoEye.Thread) end; Hub.AutoEye.Thread = task.spawn(Hub.autoEyeLoop) else if Hub.AutoEye.Thread then task.cancel(Hub.AutoEye.Thread); Hub.AutoEye.Thread = nil end end end })
+AFLeft:CreateDropdown({ Name = "Select Mode", Options = { "Sharingan [Stage 1]", "Sharingan [Stage 2]", "Sharingan [Stage 3]", "Byakugan [Stage 1]", "Byakugan [Stage 2]", "Byakugan [Stage 3]", "Byakugan [Stage 4]", "Green Gates", "Hundred Healings", "Sasuke's Rinnegan", "Cloak Of Lightning", "Pain's Rinnegan", "Shisui's Mangekyo", "Madara's Mangekyo", "Sasuke's Mangekyo", "Itachi's Mangekyo", "Ketsuryugan [Stage 1]", "Ketsuryugan [Stage 2]" }, CurrentOption = "Sharingan [Stage 1]", Flag = "ModeSelect", Callback = function(v) Hub.AutoEye.SelectedItem = type(v) == "table" and v[1] or v end })
+AFLeft:CreateToggle({ Name = "Enable Auto Mode", CurrentValue = false, Flag = "AutoMode", Callback = function(v) Hub.AutoEye.Enabled = v; if v then if Hub.AutoEye.Thread then task.cancel(Hub.AutoEye.Thread) end; Hub.AutoEye.Thread = task.spawn(Hub.autoEyeLoop) else if Hub.AutoEye.Thread then task.cancel(Hub.AutoEye.Thread); Hub.AutoEye.Thread = nil end end end })
 
 AFLeft:CreateSection("Auto Mission")
 
@@ -328,5 +327,5 @@ end
 -- ================================================================
 -- FOOTER
 -- ================================================================
-Notify("Jitler Hub v2.1 loaded!", 3)
-print("=== Jitler Hub v2.1 Loaded ===")
+Notify("Jitler Hub v2.3.1 loaded!", 3)
+print("=== Jitler Hub v2.3.1 Loaded ===")

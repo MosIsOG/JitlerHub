@@ -438,28 +438,41 @@ local function ExecuteMissionCase(missionName)
         StopMissionFarm(); MissionSystem.ActiveMission = nil; return result
 
     elseif missionName == "Corrupted Point" then
-        -- Retry scan for CorruptedPoint near the marker
-        local targets = {}
-        for attempt = 1, 10 do
-            targets = FindNPCNear(markerPos, 300, "Corrupt")
-            if #targets == 0 then
+        -- Scan within 20 studs from player position after teleport
+        local char = LocalPlayer.Character; local lr = char and char:FindFirstChild("HumanoidRootPart")
+        local playerPos = lr and lr.Position or markerPos
+        local target = nil
+        for attempt = 1, 15 do
+            -- Nearby radius scan (20 studs) for CorruptedPoint model/part
+            pcall(function()
                 for _, obj in ipairs(workspace:GetDescendants()) do
-                    if obj:IsA("Model") and obj.Name:lower():find("corrupt") then
-                        local hum = obj:FindFirstChildOfClass("Humanoid")
-                        local root = obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChild("Head") or obj:FindFirstChildWhichIsA("BasePart")
-                        if hum and hum.Health > 0 and root then table.insert(targets, { model = obj, humanoid = hum, root = root }) end
+                    if target then break end
+                    if (obj:IsA("Model") or obj:IsA("BasePart")) and obj.Name == "CorruptedPoint" then
+                        local objPos
+                        if obj:IsA("BasePart") then objPos = obj.Position
+                        elseif obj:IsA("Model") then
+                            local r = obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChild("Head") or obj:FindFirstChildWhichIsA("BasePart")
+                            if r then objPos = r.Position end
+                        end
+                        if objPos and (playerPos - objPos).Magnitude <= 20 then
+                            local hum = obj:IsA("Model") and obj:FindFirstChildOfClass("Humanoid") or nil
+                            local root = obj:IsA("Model") and (obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChild("Head") or obj:FindFirstChildWhichIsA("BasePart")) or obj
+                            if hum and hum.Health > 0 then
+                                target = { model = obj, humanoid = hum, root = root }
+                            end
+                        end
                     end
                 end
-            end
-            if #targets > 0 then break end
-            Notify("Waiting for Corrupted Point to spawn... (" .. attempt .. "/10)", 2)
+            end)
+            if target then break end
+            -- Fallback: wider scan with FindNPCNear
+            local npcTargets = FindNPCNear(playerPos, 300, "Corrupt")
+            if #npcTargets > 0 then target = npcTargets[1]; break end
+            Notify("Waiting for Corrupted Point... (" .. attempt .. "/15)", 2)
             task.wait(2)
         end
-        if #targets == 0 then Notify("Corrupted Point not found after retries!", 3); MissionSystem.ActiveMission = nil; return "failed" end
-        local char = LocalPlayer.Character; local lr = char and char:FindFirstChild("HumanoidRootPart")
-        if lr then table.sort(targets, function(a, b) return (a.root.Position - lr.Position).Magnitude < (b.root.Position - lr.Position).Magnitude end) end
-        local target = targets[1]
-        -- Use OuterShard as target position if present
+        if not target then Notify("Corrupted Point not found after retries!", 3); MissionSystem.ActiveMission = nil; return "failed" end
+        -- Prefer OuterShard as target position if present
         local outerShard = target.model:FindFirstChild("OuterShard")
         local targetPart = outerShard or target.root
         TeleportTo(targetPart.Position + Vector3.new(0, -5, 0))

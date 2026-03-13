@@ -221,11 +221,12 @@ local BossFarm = {
 local BossConfigs = {
     ["Wooden Golem"] = { height = 16 }, ["Hyuga Boss"] = { height = 10.75 }, ["Lava Snake"] = { height = 38 },
     ["Haku Boss"] = { height = 10.75 }, ["Barbarit The Rose"] = { height = 12 }, ["Manda"] = { height = 38 },
+    ["Tairock"] = { height = 12 },
 }
 local BossLootSpots = {
     ["Hyuga Boss"] = Vector3.new(-663.8, -359.9, -728.9), ["Wooden Golem"] = Vector3.new(-4716.2, 344.1, -2932.0),
     ["Haku Boss"] = Vector3.new(-3788.1, -238.5, -9723.9), ["Lava Snake"] = Vector3.new(-546.7, -546.9, -1461.6),
-    ["Barbarit The Rose"] = Vector3.zero, ["Manda"] = Vector3.zero,
+    ["Barbarit The Rose"] = Vector3.zero, ["Manda"] = Vector3.zero, ["Tairock"] = Vector3.zero,
 }
 
 local HYUGA_VOID_SAFE_SPOT = Vector3.new(-700.8, -334.3, -780.8)
@@ -292,7 +293,23 @@ end
 
 local function StartBossFarm()
     if BossFarm.AnchorConn then BossFarm.AnchorConn:Disconnect() end; if BossFarm.Thread then pcall(task.cancel, BossFarm.Thread) end
-    local config = BossConfigs[BossFarm.SelectedBoss]; local hum, model = FindBoss(BossFarm.SelectedBoss)
+    local config = BossConfigs[BossFarm.SelectedBoss]
+    -- Lava Snake: teleport to area first so trigger-spawn activates
+    if BossFarm.SelectedBoss == "Lava Snake" then
+        TeleportTo(Vector3.new(-547.6, -541.7, -1281.8)); task.wait(2)
+    end
+    local hum, model
+    -- For bosses that trigger-spawn, retry until they appear
+    if BossFarm.SelectedBoss == "Lava Snake" or BossFarm.SelectedBoss == "Tairock" then
+        for attempt = 1, 10 do
+            hum, model = FindBoss(BossFarm.SelectedBoss)
+            if hum and model then break end
+            Notify("Waiting for " .. BossFarm.SelectedBoss .. " to spawn... (" .. attempt .. "/10)", 2)
+            task.wait(2)
+        end
+    else
+        hum, model = FindBoss(BossFarm.SelectedBoss)
+    end
     if not hum or not model then Notify(BossFarm.SelectedBoss .. " not spawned!", 3); BossFarm.Enabled = false; return end
     BossFarm.Target = hum; BossFarm.TargetName = model.Name; if config then BossFarm.HeightOffset = config.height end
     if BossFarm.TargetName == "Hyuga Boss" then MonitorHyugaBossAnimations(model); MonitorHyugaVoid(model); task.spawn(function() BossFarm.HyugaHeightBoost = -2; task.wait(5); if BossFarm.HyugaHeightBoost == -2 then BossFarm.HyugaHeightBoost = 0 end end) end
@@ -343,7 +360,7 @@ Hub.StartBossFarm = StartBossFarm
 Hub.StopBossFarm = StopBossFarm
 
 -- ================================================================
--- AUTO EYE FARM
+-- AUTO MODE FARM
 -- ================================================================
 local AutoEye = { Enabled = false, Thread = nil, TargetPos = Vector3.new(-2883.2, 652.6, -5448.9), SelectedItem = "Sharingan [Stage 1]" }
 local function isOutOfForcefield(character) return character and not character:FindFirstChild("ForceField") end
@@ -352,6 +369,13 @@ local function autoEyeLoop()
     while AutoEye.Enabled do
         local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
         local root = char:WaitForChild("HumanoidRootPart", 5) or char:WaitForChild("Head", 5); if not root then task.wait(0.3); continue end
+        -- Scan inventory to check if selected mode is actually owned
+        local found = false
+        local slots = ScanInventorySlots()
+        for _, slot in ipairs(slots) do
+            if slot.name == AutoEye.SelectedItem then found = true; break end
+        end
+        if not found then Notify("Mode not found in inventory: " .. AutoEye.SelectedItem, 3); task.wait(3); continue end
         if not isOutOfForcefield(char) then while char and not isOutOfForcefield(char) and AutoEye.Enabled do if root and root.Parent then root.CFrame = CFrame.new(AutoEye.TargetPos) end; task.wait(0.05) end end
         if root and root.Parent and isOutOfForcefield(char) then
             root.CFrame = CFrame.new(AutoEye.TargetPos); task.wait(0.2)
@@ -623,7 +647,8 @@ local ChakraSafety = {
 local function GetActiveChakraCount()
     local count = 0
     for name in pairs(ChakraTracker.ActiveUsers) do
-        if name ~= LocalPlayer.Name then count = count + 1 end
+        -- Only count if player OWNS Chakra Sense AND is playing the animation
+        if name ~= LocalPlayer.Name and ChakraTracker.SenseOwners[name] then count = count + 1 end
     end
     return count
 end

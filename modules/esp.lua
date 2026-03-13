@@ -459,16 +459,16 @@ local function ScanMobs()
         local isPlayer = false
         for _, p in ipairs(Players:GetPlayers()) do if p.Character == model then isPlayer = true; break end end
         if isPlayer then return end
-        -- Skip Dialog NPCs and WorldBosses (handled by their own ESP systems)
+        -- Skip Dialog NPCs (handled by NPC ESP)
         if IsDialogNPC(model) then return end
-        if BossESP.Enabled and IsWorldBoss(model) then return end
         local hum = model:FindFirstChildOfClass("Humanoid"); if not hum or hum.Health <= 0 then return end
         local root = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Head") or model:FindFirstChildWhichIsA("BasePart"); if not root then return end
         if (pp - root.Position).Magnitude > MobESP.MaxDistance then return end
         if not MobESP.TrackedMobs[model] then
+            local isWB = IsWorldBoss(model)
             local txt = Drawing.new("Text"); txt.Center = true; txt.Outline = true; txt.OutlineColor = Color3.new(0, 0, 0)
-            txt.Color = Color3.fromRGB(255, 150, 50); txt.Size = MobESP.TextSize; txt.Visible = false
-            MobESP.TrackedMobs[model] = { text = txt, humanoid = hum }
+            txt.Color = isWB and Color3.fromRGB(180, 100, 255) or Color3.fromRGB(255, 150, 50); txt.Size = MobESP.TextSize; txt.Visible = false
+            MobESP.TrackedMobs[model] = { text = txt, humanoid = hum, isWorldBoss = isWB }
         end
     end
 
@@ -490,7 +490,12 @@ local function RenderMobESP()
         local pos, onScreen = Camera:WorldToViewportPoint(root.Position + Vector3.new(0, 3, 0))
         if not onScreen then data.text.Visible = false; continue end
         data.text.Position = Vector2.new(pos.X, pos.Y); data.text.Size = MobESP.TextSize
-        data.text.Text = Format("%s [%d/%d] [%d studs]", model.Name, math.floor(data.humanoid.Health), math.floor(data.humanoid.MaxHealth), math.floor(dist))
+        if data.isWorldBoss then
+            data.text.Text = Format("%s [%d/%d]", model.Name, math.floor(data.humanoid.Health), math.floor(data.humanoid.MaxHealth))
+            data.text.Color = Color3.fromRGB(180, 100, 255)
+        else
+            data.text.Text = Format("%s [%d/%d] [%d studs]", model.Name, math.floor(data.humanoid.Health), math.floor(data.humanoid.MaxHealth), math.floor(dist))
+        end
         data.text.Visible = true
     end
 end
