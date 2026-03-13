@@ -527,3 +527,5 @@ end
 
 Hub.StartAutoMission = StartAutoMission
 Hub.StopAutoMission = StopAutoMission
+Hub.AssignMission = AssignMission
+Hub.ExecuteMissionCase = ExecuteMissionCase

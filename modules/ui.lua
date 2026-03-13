@@ -220,6 +220,29 @@ AFLeft:CreateButton({ Name = "Refresh Missions", Callback = function() task.spaw
 AFLeft:CreateToggle({ Name = "Auto Mission Farm", CurrentValue = false, Flag = "AutoMission", Callback = function(v) if v then Hub.StartAutoMission() else Hub.StopAutoMission() end end })
 AFLeft:CreateButton({ Name = "TP to Mission Marker", Callback = function() task.spawn(Hub.TeleportToNearestMissionMarker) end })
 
+AFLeft:CreateSection("Manual Mission")
+
+local ALL_MISSIONS = { "Defeat a Boss", "Bandit Camp", "Corrupted Point", "Cratos", "Capture Manda", "Defeat a Bandit", "Crate Delivery" }
+local manualMission = ALL_MISSIONS[1]
+
+AFLeft:CreateDropdown({ Name = "Select Mission", Options = ALL_MISSIONS, CurrentOption = ALL_MISSIONS[1], Flag = "ManualMissionSelect", Callback = function(v) manualMission = type(v) == "table" and v[1] or v end })
+AFLeft:CreateButton({ Name = "Run Mission Once", Callback = function()
+    task.spawn(function()
+        if not manualMission then Notify("No mission selected!", 2); return end
+        Notify("Manual mission: " .. manualMission, 2)
+        local assigned = Hub.AssignMission(manualMission)
+        if not assigned then
+            Notify("Failed to assign mission (may already have one), trying anyway...", 2)
+        end
+        task.wait(1)
+        local result = Hub.ExecuteMissionCase(manualMission)
+        if result == "complete" then Notify("Mission complete: " .. manualMission, 3)
+        elseif result == "failed" then Notify("Mission failed: " .. manualMission, 3)
+        elseif result == "cooldown" then Notify("Mission on cooldown: " .. manualMission, 3)
+        else Notify("Mission result: " .. tostring(result), 3) end
+    end)
+end })
+
 AFRight:CreateSection("Auto Grip Farm")
 
 AFRight:CreateToggle({ Name = "Grip Alt Mode", CurrentValue = false, Flag = "GripAlt", Callback = function(v) Hub.AutoGripFarm.AltEnabled = v; if v then if Hub.AutoGripFarm.AltThread then task.cancel(Hub.AutoGripFarm.AltThread) end; Hub.AutoGripFarm.AltThread = task.spawn(Hub.autoGripAltLoop) else if Hub.AutoGripFarm.AltThread then task.cancel(Hub.AutoGripFarm.AltThread); Hub.AutoGripFarm.AltThread = nil end end end })
@@ -278,7 +301,9 @@ AFRight:CreateButton({ Name = "Buy Selected Item", Callback = function() task.sp
 AFRight:CreateSection("Bulk Sell")
 
 AFRight:CreateButton({ Name = "Sell All Trinkets", Callback = function() task.spawn(Hub.BulkSellTrinkets) end })
-AFRight:CreateButton({ Name = "Sell All Gems", Callback = function() task.spawn(Hub.BulkSellGems) end })
+local gemSellAmount = "0"
+AFRight:CreateInput({ Name = "Gem Sell Amount (2nd arg)", PlaceholderText = "0", Callback = function(v) gemSellAmount = v end })
+AFRight:CreateButton({ Name = "Sell All Gems", Callback = function() task.spawn(function() Hub.BulkSellGems(tonumber(gemSellAmount) or 0) end) end })
 AFRight:CreateButton({ Name = "Sell All Fruits", Callback = function() task.spawn(Hub.BulkSellFruits) end })
 
 AFLeft:CreateSection("Chakra Sense Safety")

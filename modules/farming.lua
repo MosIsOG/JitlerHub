@@ -67,12 +67,13 @@ local function BulkSellTrinkets()
     Notify("Bulk sold all Trinkets!", 2)
 end
 
-local function BulkSellGems()
+local function BulkSellGems(amount)
+    amount = tonumber(amount) or 0
     pcall(function()
         Hub.RefreshDataEvent()
-        if Hub.DataEvent then Hub.DataEvent:FireServer("SellingBulk", 0, "Gem") end
+        if Hub.DataEvent then Hub.DataEvent:FireServer("SellingBulk", amount, "Gem") end
     end)
-    Notify("Bulk sold all Gems!", 2)
+    Notify("Bulk sold Gems (arg: " .. tostring(amount) .. ")", 2)
 end
 
 local function BulkSellFruits()
