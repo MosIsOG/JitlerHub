@@ -1,0 +1,493 @@
+-- Jitler Hub - Missions Module (Mission System, Case Handlers, Auto Mission)
+local Hub = shared.JitlerHub
+local Players = Hub.Players
+local RunService = Hub.RunService
+local LocalPlayer = Hub.LocalPlayer
+local Notify = Hub.Notify
+local Format = Hub.Format
+local TeleportTo = Hub.TeleportTo
+local PressE = Hub.PressE
+
+-- ================================================================
+-- MISSION SYSTEM
+-- ================================================================
+local MissionSystem = {
+    VillageName = nil,
+    Board = nil,
+    AvailableMissions = {},
+    SelectedMission = nil,
+    Cooldowns = {},
+    ActiveMission = nil,
+    AutoEnabled = false,
+    Thread = nil,
+    AnchorConn = nil,
+    AttackThread = nil,
+}
+
+local VALID_VILLAGES = { Snow = true, Sorythia = true, Rain = true, Durana = true, Rogue = true }
+
+local function GetPlayerVillage()
+    local team = LocalPlayer.Team
+    if not team then return nil end
+    local name = team.Name
+    if VALID_VILLAGES[name] then return name end
+    return nil
+end
+
+local function FindMissionBoard()
+    local village = GetPlayerVillage()
+    if not village then return nil, nil end
+    MissionSystem.VillageName = village
+    local boards = workspace:FindFirstChild("Mission Boards")
+    if not boards then return nil, village end
+    for _, board in ipairs(boards:GetChildren()) do
+        local attr = nil
+        pcall(function() attr = board:GetAttribute("Village") end)
+        if attr and attr == village then
+            MissionSystem.Board = board
+            return board, village
+        end
+    end
+    return nil, village
+end
+
+local function GetAvailableVillageMissions()
+    local board, village = FindMissionBoard()
+    if not village then return {} end
+    if not board then return {} end
+    local missions = {}
+    for _, child in ipairs(board:GetChildren()) do
+        local missionName = nil
+        pcall(function() missionName = child:GetAttribute("Mission") end)
+        if missionName and missionName ~= "" then
+            if not MissionSystem.Cooldowns[missionName] or tick() > MissionSystem.Cooldowns[missionName] then
+                table.insert(missions, missionName)
+            end
+        end
+    end
+    MissionSystem.AvailableMissions = missions
+    return missions
+end
+
+local function RefreshMissionBoard()
+    local missions = GetAvailableVillageMissions()
+    if #missions == 0 then
+        Notify("No available missions! (all on cooldown or no board)", 3)
+    else
+        Notify("Found " .. #missions .. " missions", 2)
+    end
+    return missions
+end
+
+-- Notification parser
+local function GetMissionNotifications()
+    local results = {}
+    pcall(function()
+        local gui = LocalPlayer.PlayerGui:FindFirstChild("ClientGui")
+        if not gui then return end
+        local mainframe = gui:FindFirstChild("Mainframe")
+        if not mainframe then return end
+        local notifFrame = mainframe:FindFirstChild("Notification")
+        if not notifFrame then return end
+        for i = 1, 3 do
+            local nf = notifFrame:FindFirstChild("Notif" .. i)
+            if nf then
+                local msg = nf:FindFirstChild("Message")
+                if msg and msg:IsA("TextLabel") and msg.Text ~= "" then
+                    table.insert(results, msg.Text)
+                end
+            end
+        end
+    end)
+    return results
+end
+
+local function CheckNotification(pattern)
+    for _, text in ipairs(GetMissionNotifications()) do
+        if text:find(pattern) then return true, text end
+    end
+    return false, nil
+end
+
+local function ParseCooldownFromNotif(text)
+    local minutes = text:match("come back in (%d+)")
+    if minutes then return tonumber(minutes) * 60 end
+    local hours = text:match("come back in (%d+) hour")
+    if hours then return tonumber(hours) * 3600 end
+    return 300
+end
+
+-- Mission marker scanner
+local function ScanMissionMarkersFixed()
+    local markers = {}
+    local debris = workspace:FindFirstChild("Debris"); if not debris then return markers end
+    local ml = debris:FindFirstChild("Mission Locations"); if not ml then return markers end
+    for _, villageFolder in ipairs(ml:GetChildren()) do
+        for _, child in ipairs(villageFolder:GetDescendants()) do
+            if child.Name == "MissionMarker" then
+                local parent = child.Parent
+                local pos = nil
+                if parent and parent.Name == "Spawner" or (parent and parent:FindFirstChildWhichIsA("BasePart")) then
+                    pcall(function()
+                        if child:IsA("BasePart") then pos = child.Position
+                        elseif child:IsA("Attachment") then pos = child.WorldPosition
+                        elseif child:IsA("Model") then pos = child:GetPivot().Position
+                        else
+                            local bp = child:FindFirstChildWhichIsA("BasePart", true)
+                            if bp then pos = bp.Position end
+                        end
+                    end)
+                    if not pos then
+                        pcall(function()
+                            local bp = parent:FindFirstChildWhichIsA("BasePart", true)
+                            if bp then pos = bp.Position end
+                        end)
+                    end
+                end
+                if not pos and parent and parent:IsA("Model") and parent:FindFirstChildOfClass("Humanoid") then
+                    pcall(function()
+                        local root = parent:FindFirstChild("HumanoidRootPart") or parent:FindFirstChild("Head") or parent:FindFirstChildWhichIsA("BasePart")
+                        if root then pos = root.Position end
+                    end)
+                end
+                if pos then
+                    table.insert(markers, { name = villageFolder.Name .. "/" .. parent.Name, pos = pos, parent = parent })
+                end
+            end
+        end
+    end
+    return markers
+end
+
+local function GetNearestMissionMarker()
+    local markers = ScanMissionMarkersFixed()
+    if #markers == 0 then return nil end
+    local char = LocalPlayer.Character; if not char then return nil end
+    local root = char:FindFirstChild("HumanoidRootPart"); if not root then return nil end
+    local pp = root.Position
+    local nearest, minD = nil, math.huge
+    for _, m in ipairs(markers) do
+        local d = (pp - m.pos).Magnitude
+        if d < minD then minD = d; nearest = m end
+    end
+    return nearest
+end
+
+local function TeleportToNearestMissionMarker()
+    local m = GetNearestMissionMarker()
+    if not m then Notify("No mission markers found!", 2); return nil end
+    TeleportTo(m.pos); Notify("TP: " .. m.name, 2)
+    return m
+end
+
+-- Find NPC near a position
+local function FindNPCNear(pos, radius, nameFilter)
+    local found = {}
+    local function check(model)
+        if not model:IsA("Model") then return end
+        local hum = model:FindFirstChildOfClass("Humanoid"); if not hum or hum.Health <= 0 then return end
+        local root = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Head") or model:FindFirstChildWhichIsA("BasePart"); if not root then return end
+        if (root.Position - pos).Magnitude > radius then return end
+        if nameFilter then
+            if type(nameFilter) == "string" then
+                if not model.Name:find(nameFilter) then return end
+            elseif type(nameFilter) == "table" then
+                local match = false
+                for _, n in ipairs(nameFilter) do if model.Name == n then match = true; break end end
+                if not match then return end
+            end
+        end
+        table.insert(found, { model = model, humanoid = hum, root = root })
+    end
+    for _, fn in ipairs({"NPCs", "Mobs", "Enemies"}) do
+        local f = workspace:FindFirstChild(fn); if f then for _, m in ipairs(f:GetChildren()) do check(m) end end
+    end
+    for _, m in ipairs(workspace:GetChildren()) do check(m) end
+    return found
+end
+
+-- Wait for mission notification
+local function WaitForMissionResult(timeout)
+    timeout = timeout or 120
+    local start = tick()
+    while tick() - start < timeout do
+        local complete = CheckNotification("Mission Complete")
+        local failed = CheckNotification("Mission Failed")
+        local cooldown, cdText = CheckNotification("already completed this mission")
+        if complete then return "complete" end
+        if failed then return "failed" end
+        if cooldown then return "cooldown", cdText end
+        task.wait(0.5)
+    end
+    return "timeout"
+end
+
+-- Assign a mission from the board
+local function AssignMission(missionName)
+    local board = MissionSystem.Board
+    if not board then FindMissionBoard(); board = MissionSystem.Board end
+    if not board then Notify("No mission board!", 3); return false end
+    for _, child in ipairs(board:GetChildren()) do
+        local attr = nil; pcall(function() attr = child:GetAttribute("Mission") end)
+        if attr == missionName then
+            pcall(function()
+                local prox = child:FindFirstChildOfClass("ProximityPrompt")
+                if prox then
+                    local root = child:FindFirstChildWhichIsA("BasePart") or child:FindFirstChild("HumanoidRootPart")
+                    if root then TeleportTo(root.Position) end
+                    task.wait(0.5); fireproximityprompt(prox)
+                else
+                    local root = child:FindFirstChildWhichIsA("BasePart")
+                    if root then TeleportTo(root.Position); task.wait(0.5); PressE() end
+                end
+            end)
+            task.wait(1)
+            if CheckNotification("You already have a mission") then return false end
+            local _, cdText = CheckNotification("already completed this mission")
+            if cdText then
+                local cdSec = ParseCooldownFromNotif(cdText)
+                MissionSystem.Cooldowns[missionName] = tick() + cdSec
+                return false
+            end
+            return true
+        end
+    end
+    return false
+end
+
+Hub.MissionSystem = MissionSystem
+Hub.RefreshMissionBoard = RefreshMissionBoard
+Hub.GetAvailableVillageMissions = GetAvailableVillageMissions
+Hub.ScanMissionMarkersFixed = ScanMissionMarkersFixed
+Hub.TeleportToNearestMissionMarker = TeleportToNearestMissionMarker
+
+-- ================================================================
+-- MISSION CASE HANDLERS
+-- ================================================================
+
+local function MissionFarmLoop(target, heightOffset, attackDelay)
+    attackDelay = attackDelay or 0.12
+    local model = target.model; local hum = target.humanoid
+
+    MissionSystem.AnchorConn = RunService.Heartbeat:Connect(function()
+        pcall(function()
+            if not MissionSystem.ActiveMission then return end
+            if not hum or not hum.Parent or hum.Health <= 0 then return end
+            local bossRoot = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Head") or model:FindFirstChildWhichIsA("BasePart"); if not bossRoot then return end
+            local char = LocalPlayer.Character; if not char then return end; local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
+            root.CFrame = CFrame.lookAt(bossRoot.Position + Vector3.new(0, heightOffset, 0), bossRoot.Position)
+        end)
+    end)
+
+    MissionSystem.AttackThread = task.spawn(function()
+        while MissionSystem.ActiveMission and hum and hum.Parent and hum.Health > 0 do
+            pcall(function()
+                if Hub.DataEvent then
+                    local br = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Head")
+                    if br then Hub.DataEvent:FireServer("Dash", "Sub", br.Position) end
+                    task.wait(0.05)
+                    Hub.DataEvent:FireServer("CheckMeleeHit", nil, "NormalAttack", false)
+                end
+            end)
+            task.wait(attackDelay)
+        end
+    end)
+end
+
+local function StopMissionFarm()
+    if MissionSystem.AnchorConn then MissionSystem.AnchorConn:Disconnect(); MissionSystem.AnchorConn = nil end
+    if MissionSystem.AttackThread then pcall(task.cancel, MissionSystem.AttackThread); MissionSystem.AttackThread = nil end
+end
+
+local function MonitorKnockedForGrip(model)
+    local settings = model:FindFirstChild("Settings")
+    if not settings then return end
+    local knocked = settings:FindFirstChild("Knocked")
+    if not knocked then return end
+    task.spawn(function()
+        while MissionSystem.ActiveMission and model and model.Parent do
+            pcall(function()
+                if knocked.Value == true or (type(knocked.Value) == "string" and knocked.Value:upper() == "ON") or (type(knocked.Value) == "number" and knocked.Value ~= 0) then
+                    if Hub.DataEvent then Hub.DataEvent:FireServer("Grip") end
+                end
+            end)
+            task.wait(0.3)
+        end
+    end)
+end
+
+local function ExecuteMissionCase(missionName)
+    MissionSystem.ActiveMission = missionName
+    StopMissionFarm()
+
+    local marker = TeleportToNearestMissionMarker()
+    if not marker then
+        Notify("No mission marker for: " .. missionName, 3)
+        MissionSystem.ActiveMission = nil
+        return "failed"
+    end
+    task.wait(1.5)
+    local markerPos = marker.pos
+
+    if missionName == "Defeat a Boss" then
+        local targets = FindNPCNear(markerPos, 300, {"The Barbarian", "Barbarit The Rose"})
+        if #targets == 0 then Notify("Boss not found near marker!", 3); MissionSystem.ActiveMission = nil; return "failed" end
+        local target = targets[1]
+        MonitorKnockedForGrip(target.model)
+        MissionFarmLoop(target, 12, 0.12)
+        local result = WaitForMissionResult(180)
+        StopMissionFarm(); MissionSystem.ActiveMission = nil; return result
+
+    elseif missionName == "Bandit Camp" then
+        local function farmBandits()
+            for attempt = 1, 10 do
+                if not MissionSystem.ActiveMission then return "cancelled" end
+                if CheckNotification("Mission Complete") then return "complete" end
+                local targets = FindNPCNear(markerPos, 300, "Bandit")
+                if #targets == 0 then
+                    if CheckNotification("Mission Complete") then return "complete" end
+                    task.wait(1); continue
+                end
+                for _, target in ipairs(targets) do
+                    if not MissionSystem.ActiveMission then return "cancelled" end
+                    MissionFarmLoop(target, 10.75, 0.12)
+                    while MissionSystem.ActiveMission and target.humanoid and target.humanoid.Parent and target.humanoid.Health > 0 do task.wait(0.3) end
+                    StopMissionFarm()
+                    if CheckNotification("Mission Complete") then return "complete" end
+                end
+                task.wait(1)
+            end
+            return WaitForMissionResult(30)
+        end
+        local result = farmBandits()
+        StopMissionFarm(); MissionSystem.ActiveMission = nil; return result
+
+    elseif missionName == "Corrupted Point" then
+        local targets = {}
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            if obj:IsA("Model") and obj.Name == "CorruptedPoint" then
+                local hum = obj:FindFirstChildOfClass("Humanoid")
+                local root = obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChildWhichIsA("BasePart")
+                if hum and hum.Health > 0 and root then table.insert(targets, { model = obj, humanoid = hum, root = root }) end
+            end
+        end
+        if #targets == 0 then Notify("CorruptedPoint not found!", 3); MissionSystem.ActiveMission = nil; return "failed" end
+        local char = LocalPlayer.Character; local lr = char and char:FindFirstChild("HumanoidRootPart")
+        if lr then table.sort(targets, function(a, b) return (a.root.Position - lr.Position).Magnitude < (b.root.Position - lr.Position).Magnitude end) end
+        local target = targets[1]
+        TeleportTo(target.root.Position + Vector3.new(0, -5, 0))
+        task.wait(0.5)
+        MissionFarmLoop(target, -5, 0.12)
+        local result = WaitForMissionResult(180)
+        StopMissionFarm(); MissionSystem.ActiveMission = nil; return result
+
+    elseif missionName == "Cratos" then
+        local targets = FindNPCNear(markerPos, 300, {"Cratos"})
+        if #targets == 0 then Notify("Cratos not found near marker!", 3); MissionSystem.ActiveMission = nil; return "failed" end
+        MissionFarmLoop(targets[1], 10.75, 0.12)
+        local result = WaitForMissionResult(180)
+        StopMissionFarm(); MissionSystem.ActiveMission = nil; return result
+
+    elseif missionName == "Capture Manda" then
+        local targets = FindNPCNear(markerPos, 300, {"Manda"})
+        if #targets == 0 then Notify("Manda not found near marker!", 3); MissionSystem.ActiveMission = nil; return "failed" end
+        local target = targets[1]
+        pcall(function()
+            local hum = target.humanoid; local animator = hum:FindFirstChildOfClass("Animator")
+            if animator then
+                local mandaConn
+                mandaConn = animator.AnimationPlayed:Connect(function(track)
+                    if not MissionSystem.ActiveMission then mandaConn:Disconnect(); return end
+                end)
+            end
+        end)
+        MissionFarmLoop(target, 38, 0.12)
+        local result = WaitForMissionResult(180)
+        StopMissionFarm(); MissionSystem.ActiveMission = nil; return result
+
+    elseif missionName == "Defeat a Bandit" then
+        local targets = FindNPCNear(markerPos, 300, "Bandit")
+        if #targets == 0 then Notify("Bandit not found near marker!", 3); MissionSystem.ActiveMission = nil; return "failed" end
+        MissionFarmLoop(targets[1], 10.75, 0.12)
+        local result = WaitForMissionResult(180)
+        StopMissionFarm(); MissionSystem.ActiveMission = nil; return result
+
+    elseif missionName == "Crate Delivery" then
+        task.wait(0.5)
+        pcall(function() Hub.DataFunction:InvokeServer("Crate Delivery") end)
+        local result = WaitForMissionResult(30)
+        MissionSystem.ActiveMission = nil; return result
+
+    else
+        Notify("Unknown mission: " .. missionName, 3)
+        MissionSystem.ActiveMission = nil
+        return "unknown"
+    end
+end
+
+-- ================================================================
+-- AUTO MISSION
+-- ================================================================
+local function StopAutoMission()
+    MissionSystem.AutoEnabled = false
+    MissionSystem.ActiveMission = nil
+    StopMissionFarm()
+    if MissionSystem.Thread then pcall(task.cancel, MissionSystem.Thread); MissionSystem.Thread = nil end
+end
+
+local function StartAutoMission()
+    StopAutoMission()
+    MissionSystem.AutoEnabled = true
+    local village = GetPlayerVillage()
+    if not village then
+        Notify("You need to join a village for this feature!", 3)
+        MissionSystem.AutoEnabled = false
+        return
+    end
+    FindMissionBoard()
+
+    MissionSystem.Thread = task.spawn(function()
+        while MissionSystem.AutoEnabled do
+            local missions = GetAvailableVillageMissions()
+            if #missions == 0 then
+                Notify("All missions on cooldown!", 3)
+                MissionSystem.AutoEnabled = false
+                break
+            end
+
+            local missionToRun = MissionSystem.SelectedMission
+            if not missionToRun or not table.find(missions, missionToRun) then
+                missionToRun = missions[1]
+            end
+
+            Notify("AutoMission: " .. missionToRun, 2)
+
+            local assigned = AssignMission(missionToRun)
+            if not assigned then
+                if CheckNotification("You already have a mission") then
+                    -- Already have a mission, try to execute it
+                else
+                    Notify("Failed to assign: " .. missionToRun, 2)
+                    task.wait(2); continue
+                end
+            end
+            task.wait(1)
+
+            local result = ExecuteMissionCase(missionToRun)
+            if result == "complete" then
+                Notify("Mission complete: " .. missionToRun, 2)
+            elseif result == "failed" then
+                Notify("Mission failed: " .. missionToRun, 2)
+            elseif result == "cooldown" then
+                MissionSystem.Cooldowns[missionToRun] = tick() + 300
+                Notify("Mission on cooldown: " .. missionToRun, 2)
+            end
+
+            if not MissionSystem.AutoEnabled then break end
+            task.wait(3)
+        end
+    end)
+end
+
+Hub.StartAutoMission = StartAutoMission
+Hub.StopAutoMission = StopAutoMission
