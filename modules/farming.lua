@@ -61,26 +61,26 @@ Hub.ToggleFullBright = ToggleFullBright
 -- ================================================================
 local function BulkSellTrinkets()
     pcall(function()
-        Hub.RefreshDataFunction()
-        if Hub.DataFunction then Hub.DataFunction:InvokeServer("SellingBulk", 5, "Trinket") end
+        Hub.RefreshDataEvent()
+        if Hub.DataEvent then Hub.DataEvent:FireServer("SellingBulk", 5, "Trinket") end
     end)
     Notify("Bulk sold all Trinkets!", 2)
 end
 
 local function BulkSellGems()
     pcall(function()
-        Hub.RefreshDataFunction()
-        if Hub.DataFunction then Hub.DataFunction:InvokeServer("SellingBulk", 0, "Gem") end
+        Hub.RefreshDataEvent()
+        if Hub.DataEvent then Hub.DataEvent:FireServer("SellingBulk", 0, "Gem") end
     end)
     Notify("Bulk sold all Gems!", 2)
 end
 
 local function BulkSellFruits()
     pcall(function()
-        Hub.RefreshDataFunction()
+        Hub.RefreshDataEvent()
         local fishTarget = nil
         pcall(function() fishTarget = workspace:GetChildren()[68] and workspace:GetChildren()[68]:FindFirstChild("HumanoidRootPart") end)
-        if Hub.DataFunction then Hub.DataFunction:InvokeServer("SellingBulk", 0, "Fruit", "Fish", fishTarget) end
+        if Hub.DataEvent then Hub.DataEvent:FireServer("SellingBulk", 0, "Fruit", "Fish", fishTarget) end
     end)
     Notify("Bulk sold all Fruits!", 2)
 end

@@ -125,33 +125,58 @@ local function ScanMissionMarkersFixed()
     for _, villageFolder in ipairs(ml:GetChildren()) do
         for _, child in ipairs(villageFolder:GetDescendants()) do
             if child.Name == "MissionMarker" then
+                -- Check Active property - skip inactive markers
+                local active = true
+                pcall(function()
+                    local activeVal = child:FindFirstChild("Active")
+                    if activeVal then
+                        local v = activeVal.Value
+                        if v == false or v == "Off" or v == "off" or v == "OFF" then active = false end
+                    else
+                        local attr = child:GetAttribute("Active")
+                        if attr ~= nil then
+                            if attr == false or attr == "Off" or attr == "off" or attr == "OFF" then active = false end
+                        end
+                    end
+                end)
+                if not active then continue end
+
                 local parent = child.Parent
                 local pos = nil
-                if parent and parent.Name == "Spawner" or (parent and parent:FindFirstChildWhichIsA("BasePart")) then
+                -- Try getting position from the marker itself
+                pcall(function()
+                    if child:IsA("BasePart") then pos = child.Position
+                    elseif child:IsA("Attachment") then pos = child.WorldPosition
+                    elseif child:IsA("Model") then pos = child:GetPivot().Position
+                    else
+                        local bp = child:FindFirstChildWhichIsA("BasePart", true)
+                        if bp then pos = bp.Position end
+                    end
+                end)
+                -- Try getting position from the parent spawner
+                if not pos and parent then
                     pcall(function()
-                        if child:IsA("BasePart") then pos = child.Position
-                        elseif child:IsA("Attachment") then pos = child.WorldPosition
-                        elseif child:IsA("Model") then pos = child:GetPivot().Position
+                        if parent:IsA("BasePart") then pos = parent.Position
+                        elseif parent:IsA("Model") then
+                            local root = parent:FindFirstChild("HumanoidRootPart") or parent:FindFirstChild("Head") or parent:FindFirstChildWhichIsA("BasePart")
+                            if root then pos = root.Position else pos = parent:GetPivot().Position end
                         else
-                            local bp = child:FindFirstChildWhichIsA("BasePart", true)
+                            local bp = parent:FindFirstChildWhichIsA("BasePart", true)
                             if bp then pos = bp.Position end
                         end
                     end)
-                    if not pos then
-                        pcall(function()
-                            local bp = parent:FindFirstChildWhichIsA("BasePart", true)
-                            if bp then pos = bp.Position end
-                        end)
-                    end
                 end
-                if not pos and parent and parent:IsA("Model") and parent:FindFirstChildOfClass("Humanoid") then
+                -- Walk up one more level if still no position
+                if not pos and parent and parent.Parent then
                     pcall(function()
-                        local root = parent:FindFirstChild("HumanoidRootPart") or parent:FindFirstChild("Head") or parent:FindFirstChildWhichIsA("BasePart")
-                        if root then pos = root.Position end
+                        local gp = parent.Parent
+                        local bp = gp:FindFirstChildWhichIsA("BasePart", true)
+                        if bp then pos = bp.Position end
                     end)
                 end
                 if pos then
-                    table.insert(markers, { name = villageFolder.Name .. "/" .. parent.Name, pos = pos, parent = parent })
+                    local label = villageFolder.Name .. "/" .. (parent and parent.Name or "unknown")
+                    table.insert(markers, { name = label, pos = pos, parent = parent })
                 end
             end
         end
