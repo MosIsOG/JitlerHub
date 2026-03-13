@@ -38,6 +38,14 @@ function Hub.RefreshDataEvent()
     return Hub.DataEvent
 end
 
+function Hub.RefreshDataFunction()
+    if not Hub.DataFunction then
+        Hub.EventsFolder = ReplicatedStorage:FindFirstChild("Events")
+        Hub.DataFunction = Hub.EventsFolder and Hub.EventsFolder:FindFirstChild("DataFunction")
+    end
+    return Hub.DataFunction
+end
+
 function Hub.Notify(msg, dur)
     JitlerUI:Notify({Title="Jitler Hub", Content=tostring(msg), Duration=dur or 3})
 end

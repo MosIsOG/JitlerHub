@@ -156,7 +156,7 @@ end
 local function MonitorEntity(model)
     if AutoBlock.MonitoredEntities[model] or model == LocalPlayer.Character then return end
     local hum = model:FindFirstChildOfClass("Humanoid"); if not hum then return end; local animator = hum:FindFirstChildOfClass("Animator"); if not animator then return end
-    local conn = animator.AnimationPlayed:Connect(function(track)
+    local function onAnimPlayed(track)
         if not AutoBlock.Enabled then return end; local assetId = track.Animation.AnimationId:match("rbxassetid://(%d+)") or track.Animation.AnimationId
         for _, rule in ipairs(BlockRules) do
             if assetId == rule.animID then
@@ -164,9 +164,10 @@ local function MonitorEntity(model)
                 else if rule.distance then local d = GetDistToEntity(model); if not d or d > rule.distance then return end end; ScheduleBlock(model.Name or "entity", rule.delay or 0.3) end; return
             end
         end
-    end)
+    end
+    local conn = animator.AnimationPlayed:Connect(onAnimPlayed)
     AutoBlock.MonitoredEntities[model] = { conn }
-    for _, t in ipairs(animator:GetPlayingAnimationTracks()) do conn:Fire(t) end
+    for _, t in ipairs(animator:GetPlayingAnimationTracks()) do onAnimPlayed(t) end
 end
 
 local function ScanForEntities()

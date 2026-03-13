@@ -231,14 +231,25 @@ local function AssignMission(missionName)
         local attr = nil; pcall(function() attr = child:GetAttribute("Mission") end)
         if attr == missionName then
             pcall(function()
+                local root = child:FindFirstChildWhichIsA("BasePart") or child:FindFirstChild("HumanoidRootPart")
+                if root then TeleportTo(root.Position) end
+                task.wait(0.5)
                 local prox = child:FindFirstChildOfClass("ProximityPrompt")
                 if prox then
-                    local root = child:FindFirstChildWhichIsA("BasePart") or child:FindFirstChild("HumanoidRootPart")
-                    if root then TeleportTo(root.Position) end
-                    task.wait(0.5); fireproximityprompt(prox)
-                else
-                    local root = child:FindFirstChildWhichIsA("BasePart")
-                    if root then TeleportTo(root.Position); task.wait(0.5); PressE() end
+                    if fireproximityprompt then fireproximityprompt(prox) end
+                end
+                local click = child:FindFirstChildOfClass("ClickDetector")
+                if click then
+                    if fireclickdetector then fireclickdetector(click) end
+                end
+                if not prox and not click then
+                    if getconnections then
+                        for _, sig in ipairs({"MouseClick", "MouseButton1Click", "Activated"}) do
+                            local obj = child:FindFirstChild(sig)
+                            if obj then for _, c in ipairs(getconnections(obj)) do pcall(function() c:Fire() end) end end
+                        end
+                    end
+                    PressE()
                 end
             end)
             task.wait(1)
