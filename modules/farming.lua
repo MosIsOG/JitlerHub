@@ -20,27 +20,37 @@ local OrigOutdoorAmbient = Lighting.OutdoorAmbient
 local OrigGlobalShadows = Lighting.GlobalShadows
 local NoFogEnabled = false
 local NoRainEnabled = false
-local NoRainConn = nil
 
 local function ToggleNoFog(enabled)
     NoFogEnabled = enabled
-    if enabled then OrigFogEnd = Lighting.FogEnd; Lighting.FogEnd = 1000000
+    if enabled then OrigFogEnd = Lighting.FogEnd; Lighting.FogEnd = 9999999
     else Lighting.FogEnd = OrigFogEnd end
 end
+
+local NoRainConns = {}
+local RainPartsClone = nil
 
 local function ToggleNoRain(enabled)
     NoRainEnabled = enabled
     if enabled then
-        if NoRainConn then NoRainConn:Disconnect() end
+        for _, c in ipairs(NoRainConns) do pcall(function() c:Disconnect() end) end; NoRainConns = {}
         pcall(function()
+            local rainParts = workspace:FindFirstChild("RainParts")
+            if rainParts then RainPartsClone = rainParts:Clone(); rainParts:Destroy() end
             for _, v in ipairs(Lighting:GetDescendants()) do if v:IsA("ParticleEmitter") then v.Enabled = false end end
             local terrain = workspace:FindFirstChild("Terrain")
             if terrain then for _, v in ipairs(terrain:GetDescendants()) do if v:IsA("ParticleEmitter") then v.Enabled = false end end end
         end)
-        NoRainConn = Lighting.DescendantAdded:Connect(function(child) if child:IsA("ParticleEmitter") then child.Enabled = false end end)
+        table.insert(NoRainConns, workspace.ChildAdded:Connect(function(child)
+            if child.Name == "RainParts" then pcall(function() RainPartsClone = child:Clone(); child:Destroy() end) end
+        end))
+        table.insert(NoRainConns, Lighting.DescendantAdded:Connect(function(child) if child:IsA("ParticleEmitter") then child.Enabled = false end end))
     else
-        if NoRainConn then NoRainConn:Disconnect(); NoRainConn = nil end
-        pcall(function() for _, v in ipairs(Lighting:GetDescendants()) do if v:IsA("ParticleEmitter") then v.Enabled = true end end end)
+        for _, c in ipairs(NoRainConns) do pcall(function() c:Disconnect() end) end; NoRainConns = {}
+        pcall(function()
+            if RainPartsClone then RainPartsClone.Parent = workspace; RainPartsClone = nil end
+            for _, v in ipairs(Lighting:GetDescendants()) do if v:IsA("ParticleEmitter") then v.Enabled = true end end
+        end)
     end
 end
 
@@ -339,6 +349,7 @@ local function StartBossFarm()
     BossFarm.Thread = task.spawn(function()
         while BossFarm.Enabled do
             if not BossFarm.HyugaInVoid and BossFarm.Target and BossFarm.Target.Parent and BossFarm.Target.Health > 0 then
+                if Hub.AutoBlock and Hub.AutoBlock.CurrentlyBlocking then task.wait(0.05); continue end
                 if Hub.DataEvent then pcall(function() local br = GetBossRoot(BossFarm.Target.Parent); if br then Hub.DataEvent:FireServer("Dash", "Sub", br.Position) end end); task.wait(0.05); pcall(function() Hub.DataEvent:FireServer("CheckMeleeHit", nil, "NormalAttack", false) end) end
             end; task.wait(BossFarm.AttackDelay)
         end

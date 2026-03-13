@@ -461,6 +461,8 @@ local function ScanMobs()
         if isPlayer then return end
         -- Skip Dialog NPCs (handled by NPC ESP)
         if IsDialogNPC(model) then return end
+        -- Skip WorldBosses (handled by Boss ESP)
+        if IsWorldBoss(model) then return end
         local hum = model:FindFirstChildOfClass("Humanoid"); if not hum or hum.Health <= 0 then return end
         local root = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Head") or model:FindFirstChildWhichIsA("BasePart"); if not root then return end
         if (pp - root.Position).Magnitude > MobESP.MaxDistance then return end
@@ -472,7 +474,7 @@ local function ScanMobs()
         end
     end
 
-    for _, fn in ipairs(MOB_FOLDERS) do local folder = workspace:FindFirstChild(fn); if folder then for _, m in ipairs(folder:GetChildren()) do tryTrack(m) end end end
+    for _, fn in ipairs(MOB_FOLDERS) do local folder = workspace:FindFirstChild(fn); if folder then for _, m in ipairs(folder:GetDescendants()) do tryTrack(m) end end end
     for _, m in ipairs(workspace:GetChildren()) do tryTrack(m) end
 end
 

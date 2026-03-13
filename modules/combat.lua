@@ -120,7 +120,7 @@ local BlockRules = {
     { animID = "7275651023", delay = 0.2, distance = 19 }, { animID = "86213040968703", delay = 0.0, distance = 25, continuous = true },
     { animID = "116907126244057", delay = 1.1, continuous = true }, { animID = "120758909308511", delay = 1.0, distance = 101, continuous = true },
 }
-local AutoBlock = { Enabled = false, MonitoredEntities = {}, Triggered = {}, ContinuousMonitors = {}, ScanThread = nil }
+local AutoBlock = { Enabled = false, MonitoredEntities = {}, Triggered = {}, ContinuousMonitors = {}, ScanThread = nil, CurrentlyBlocking = false }
 
 local function GetDistToEntity(model)
     local lc = LocalPlayer.Character; if not lc or not model then return nil end
@@ -129,8 +129,8 @@ local function GetDistToEntity(model)
     if not lr or not tr then return nil end; return (lr.Position - tr.Position).Magnitude
 end
 
-local function Block() if Hub.DataFunction then pcall(function() Hub.DataFunction:InvokeServer("Block") end) end end
-local function Unblock() if Hub.DataFunction then pcall(function() Hub.DataFunction:InvokeServer("EndBlock") end) end end
+local function Block() AutoBlock.CurrentlyBlocking = true; if Hub.DataFunction then pcall(function() Hub.DataFunction:InvokeServer("Block") end) end end
+local function Unblock() if Hub.DataFunction then pcall(function() Hub.DataFunction:InvokeServer("EndBlock") end) end; AutoBlock.CurrentlyBlocking = false end
 
 local function ScheduleBlock(name, delay)
     if AutoBlock.Triggered[name] then return end; AutoBlock.Triggered[name] = true

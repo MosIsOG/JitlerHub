@@ -353,6 +353,8 @@ local function MissionFarmLoop(target, heightOffset, attackDelay)
                 task.wait(0.5)
                 continue
             end
+            -- Pause attacks while AutoBlock is blocking
+            if Hub.AutoBlock and Hub.AutoBlock.CurrentlyBlocking then task.wait(0.05); continue end
             pcall(function()
                 if Hub.DataEvent then
                     local br = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Head")
@@ -395,14 +397,19 @@ local function ExecuteMissionCase(missionName)
     MissionSystem.ActiveMission = missionName
     StopMissionFarm()
 
-    local marker = TeleportToNearestMissionMarker()
-    if not marker then
-        Notify("No mission marker for: " .. missionName, 3)
-        MissionSystem.ActiveMission = nil
-        return "failed"
+    local marker = nil
+    local markerPos = nil
+
+    if missionName ~= "Crate Delivery" then
+        marker = TeleportToNearestMissionMarker()
+        if not marker then
+            Notify("No mission marker for: " .. missionName, 3)
+            MissionSystem.ActiveMission = nil
+            return "failed"
+        end
+        task.wait(1.5)
+        markerPos = marker.pos
     end
-    task.wait(1.5)
-    local markerPos = marker.pos
 
     if missionName == "Defeat a Boss" then
         local targets = FindNPCNear(markerPos, 300, {"The Barbarian", "Barbarit The Rose"})
@@ -438,23 +445,23 @@ local function ExecuteMissionCase(missionName)
         StopMissionFarm(); MissionSystem.ActiveMission = nil; return result
 
     elseif missionName == "Corrupted Point" then
-        -- Scan within 20 studs from player position after teleport
+        -- Scan within 100 studs from marker/player position for CorruptedPoint
         local char = LocalPlayer.Character; local lr = char and char:FindFirstChild("HumanoidRootPart")
         local playerPos = lr and lr.Position or markerPos
         local target = nil
         for attempt = 1, 15 do
-            -- Nearby radius scan (20 studs) for CorruptedPoint model/part
+            -- Nearby radius scan (100 studs) for CorruptedPoint model/part
             pcall(function()
                 for _, obj in ipairs(workspace:GetDescendants()) do
                     if target then break end
-                    if (obj:IsA("Model") or obj:IsA("BasePart")) and obj.Name == "CorruptedPoint" then
+                    if (obj:IsA("Model") or obj:IsA("BasePart")) and (obj.Name == "CorruptedPoint" or obj.Name:find("Corrupt")) then
                         local objPos
                         if obj:IsA("BasePart") then objPos = obj.Position
                         elseif obj:IsA("Model") then
                             local r = obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChild("Head") or obj:FindFirstChildWhichIsA("BasePart")
                             if r then objPos = r.Position end
                         end
-                        if objPos and (playerPos - objPos).Magnitude <= 20 then
+                        if objPos and (playerPos - objPos).Magnitude <= 100 then
                             local hum = obj:IsA("Model") and obj:FindFirstChildOfClass("Humanoid") or nil
                             local root = obj:IsA("Model") and (obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChild("Head") or obj:FindFirstChildWhichIsA("BasePart")) or obj
                             if hum and hum.Health > 0 then
@@ -468,6 +475,11 @@ local function ExecuteMissionCase(missionName)
             -- Fallback: wider scan with FindNPCNear
             local npcTargets = FindNPCNear(playerPos, 300, "Corrupt")
             if #npcTargets > 0 then target = npcTargets[1]; break end
+            -- Also try markerPos if different from playerPos
+            if markerPos and (markerPos - playerPos).Magnitude > 5 then
+                npcTargets = FindNPCNear(markerPos, 300, "Corrupt")
+                if #npcTargets > 0 then target = npcTargets[1]; break end
+            end
             Notify("Waiting for Corrupted Point... (" .. attempt .. "/15)", 2)
             task.wait(2)
         end
@@ -513,13 +525,11 @@ local function ExecuteMissionCase(missionName)
         StopMissionFarm(); MissionSystem.ActiveMission = nil; return result
 
     elseif missionName == "Crate Delivery" then
-        -- The Crate Delivery NPC has a MissionMarker assigned to our UserId
-        -- We already teleported to the marker above, now find and interact with the NPC
-        task.wait(0.5)
-        -- Look for NPC near the marker position with no distance limit
+        -- Scan NPCs/Mobs/Enemies for MissionMarker assigned to our UserId
         local npc = nil
         pcall(function()
             for _, fn in ipairs({"NPCs", "Mobs", "Enemies"}) do
+                if npc then break end
                 local f = workspace:FindFirstChild(fn)
                 if f then
                     for _, m in ipairs(f:GetDescendants()) do
@@ -527,37 +537,50 @@ local function ExecuteMissionCase(missionName)
                             local uid = nil
                             pcall(function() uid = m:GetAttribute("UserId") or (m:FindFirstChild("UserId") and m:FindFirstChild("UserId").Value) end)
                             if uid and tonumber(uid) == LocalPlayer.UserId then
-                                npc = m.Parent
-                            end
-                        end
-                    end
-                end
-            end
-            -- Also scan workspace children and Debris
-            for _, container in ipairs({workspace, workspace:FindFirstChild("Debris")}) do
-                if container then
-                    for _, m in ipairs(container:GetDescendants()) do
-                        if m.Name == "MissionMarker" and not npc then
-                            local uid = nil
-                            pcall(function() uid = m:GetAttribute("UserId") or (m:FindFirstChild("UserId") and m:FindFirstChild("UserId").Value) end)
-                            if uid and tonumber(uid) == LocalPlayer.UserId then
-                                npc = m.Parent
+                                npc = m.Parent; break
                             end
                         end
                     end
                 end
             end
         end)
+        -- Fallback: scan workspace and Debris
+        if not npc then
+            pcall(function()
+                for _, container in ipairs({workspace, workspace:FindFirstChild("Debris")}) do
+                    if npc then break end
+                    if container then
+                        for _, m in ipairs(container:GetDescendants()) do
+                            if m.Name == "MissionMarker" then
+                                local uid = nil
+                                pcall(function() uid = m:GetAttribute("UserId") or (m:FindFirstChild("UserId") and m:FindFirstChild("UserId").Value) end)
+                                if uid and tonumber(uid) == LocalPlayer.UserId then
+                                    npc = m.Parent; break
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+        -- Last resort: try mission marker system
+        if not npc then
+            local m = TeleportToNearestMissionMarker()
+            if m and m.parent then npc = m.parent end
+        end
         if npc then
             local root = npc:FindFirstChild("HumanoidRootPart") or npc:FindFirstChild("Head") or npc:FindFirstChildWhichIsA("BasePart")
             if root then TeleportTo(root.Position); task.wait(0.5) end
-            -- Try interacting
-            local prox = npc:FindFirstChildOfClass("ProximityPrompt", true)
+            -- Try ProximityPrompt (search descendants)
+            local prox = nil
+            pcall(function() for _, desc in ipairs(npc:GetDescendants()) do if desc:IsA("ProximityPrompt") then prox = desc; break end end end)
             if prox then
                 if fireproximityprompt then fireproximityprompt(prox) end
             else
                 PressE()
             end
+        else
+            Notify("Crate Delivery NPC not found!", 3)
         end
         task.wait(0.5)
         pcall(function() Hub.RefreshDataFunction(); if Hub.DataFunction then Hub.DataFunction:InvokeServer("Crate Delivery") end end)

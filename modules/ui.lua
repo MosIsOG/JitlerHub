@@ -18,7 +18,7 @@ local Window = JitlerUI:CreateWindow({
     Icon = "rbxassetid://124980045936567",
     LoadingTitle = "Jitler Hub",
     LoadingSubtitle = "Loading modules...",
-    ConfigurationSaving = { Enabled = true, FolderName = "JitlerHub", FileName = "Config" },
+    ConfigurationSaving = { Enabled = false, FolderName = "JitlerHub", FileName = "Config" },
     SettingsIcon = "rbxassetid://7734053495",
 })
 
@@ -77,6 +77,13 @@ ESPRight:CreateSection("Mob ESP")
 ESPRight:CreateToggle({ Name = "Enable Mob ESP", Description = "Show mob names & health", CurrentValue = false, Flag = "MobESP", Callback = function(v) Hub.MobESP.Enabled = v; if v then Hub.StartMobESP() else Hub.StopMobESP() end end })
 ESPRight:CreateSlider({ Name = "Mob Max Distance", Range = { 100, 2000 }, Increment = 50, Suffix = " studs", CurrentValue = 500, Flag = "MobMaxDist", Callback = function(v) Hub.MobESP.MaxDistance = v end })
 ESPRight:CreateSlider({ Name = "Mob Text Size", Range = { 8, 24 }, Increment = 1, Suffix = "px", CurrentValue = 14, Flag = "MobTextSize", Callback = function(v) Hub.MobESP.TextSize = v end })
+
+ESPRight:CreateSection("Boss ESP")
+
+ESPRight:CreateToggle({ Name = "Enable Boss ESP", Description = "Show WorldBoss HP panel (close) / text (far)", CurrentValue = false, Flag = "BossESP", Callback = function(v) Hub.BossESP.Enabled = v; if v then Hub.StartBossESP() else Hub.StopBossESP() end end })
+ESPRight:CreateSlider({ Name = "Boss Max Distance", Range = { 100, 5000 }, Increment = 50, Suffix = " studs", CurrentValue = 2000, Flag = "BossMaxDist", Callback = function(v) Hub.BossESP.MaxDistance = v end })
+ESPRight:CreateSlider({ Name = "Boss Panel Distance", Range = { 50, 1000 }, Increment = 25, Suffix = " studs", CurrentValue = 500, Flag = "BossTransDist", Callback = function(v) Hub.BossESP.TransitionDist = v end })
+ESPRight:CreateSlider({ Name = "Boss Text Size", Range = { 8, 24 }, Increment = 1, Suffix = "px", CurrentValue = 14, Flag = "BossTextSize", Callback = function(v) Hub.BossESP.TextSize = v end })
 
 ESPLeft:CreateSection("NPC ESP")
 
@@ -151,7 +158,7 @@ QRight:CreateButton({ Name = "Low Player Server", Callback = function() Hub.DoSe
 QRight:CreateSection("Hitbox Extender")
 
 QRight:CreateToggle({ Name = "Enable Hitbox Extender", Description = "Extend target HumanoidRootPart size", CurrentValue = false, Flag = "HitboxExtender", Callback = function(v) Hub.HitboxExtender.Enabled = v; if v then Hub.StartHitbox() else Hub.StopHitbox() end end })
-QRight:CreateSlider({ Name = "Hitbox Size", Range = { 2, 10 }, Increment = 0.5, Suffix = " studs", CurrentValue = 5, Flag = "HitboxSize", Callback = function(v) Hub.HitboxExtender.Size = v end })
+QRight:CreateSlider({ Name = "Hitbox Size", Range = { 2, 50 }, Increment = 0.5, Suffix = " studs", CurrentValue = 5, Flag = "HitboxSize", Callback = function(v) Hub.HitboxExtender.Size = v end })
 QRight:CreateToggle({ Name = "Show Hitbox Radius", Description = "Red sphere indicator on targets", CurrentValue = false, Flag = "ShowHitboxRadius", Callback = function(v) Hub.HitboxExtender.ShowRadius = v end })
 end
 
@@ -322,10 +329,18 @@ AFLeft:CreateSection("Chakra Sense Safety")
 
 AFLeft:CreateToggle({ Name = "Enable Chakra Safety", Description = "Hide at Secret Spot when Chakra Sense detected", CurrentValue = false, Flag = "ChakraSafety", Callback = function(v) Hub.ChakraSafety.Enabled = v; if v then Hub.StartChakraSafety() else Hub.StopChakraSafety() end end })
 AFLeft:CreateSlider({ Name = "Check Interval", Range = { 0.5, 5 }, Increment = 0.5, Suffix = "s", CurrentValue = 1, Flag = "ChakraSafetyInterval", Callback = function(v) Hub.ChakraSafety.CheckInterval = v end })
+
+AFLeft:CreateSection("Config Management")
+
+AFLeft:CreateButton({ Name = "Save Config", Callback = function() pcall(function() JitlerUI:SaveConfiguration() end); Notify("Config saved!", 2) end })
+AFLeft:CreateToggle({ Name = "Auto Load Config", Description = "Load saved config on next launch", CurrentValue = false, Flag = "AutoLoadConfig", Callback = function(v)
+    pcall(function() if v then JitlerUI:LoadConfiguration(); Notify("Config loaded!", 2) end end)
+end })
+AFLeft:CreateButton({ Name = "Overwrite Config", Callback = function() pcall(function() JitlerUI:SaveConfiguration() end); Notify("Config overwritten!", 2) end })
 end
 
 -- ================================================================
 -- FOOTER
 -- ================================================================
-Notify("Jitler Hub v2.3.1 loaded!", 3)
-print("=== Jitler Hub v2.3.1 Loaded ===")
+Notify("Jitler Hub v2.3.2 loaded!", 3)
+print("=== Jitler Hub v2.3.2 Loaded ===")
