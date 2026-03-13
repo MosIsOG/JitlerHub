@@ -447,6 +447,24 @@ Hub.StopPlayerHighlight = StopPlayerHighlight
 local MobESP = { Enabled = false, MaxDistance = 500, TextSize = 14, ScanInterval = 2, TrackedMobs = {}, ScanThread = nil, RenderConn = nil }
 local MOB_FOLDERS = { "NPCs", "Mobs", "Enemies" }
 
+-- NPC classification helpers (used by MobESP, NPCESP, BossESP)
+local function IsDialogNPC(model)
+    local npcVal = model:FindFirstChild("NPC")
+    if not npcVal or not npcVal:IsA("StringValue") then return false end
+    return npcVal.Value == "Dialog"
+end
+
+local function IsCombatMob(model)
+    local npcVal = model:FindFirstChild("NPC")
+    if not npcVal or not npcVal:IsA("StringValue") then return false end
+    return npcVal.Value == "Combat"
+end
+
+local function IsWorldBoss(model)
+    if not IsCombatMob(model) then return false end
+    return model:FindFirstChild("WorldBoss") ~= nil
+end
+
 local function ScanMobs()
     if not MobESP.Enabled then return end
     local lc = LocalPlayer.Character; if not lc then return end
@@ -525,23 +543,6 @@ Hub.StopMobESP = StopMobESP
 -- NPC ESP SYSTEM (Dialog NPCs only)
 -- ================================================================
 local NPCESP = { Enabled = false, MaxDistance = 500, TextSize = 14, ScanInterval = 3, TrackedNPCs = {}, ScanThread = nil, RenderConn = nil }
-
-local function IsDialogNPC(model)
-    local npcVal = model:FindFirstChild("NPC")
-    if not npcVal or not npcVal:IsA("StringValue") then return false end
-    return npcVal.Value == "Dialog"
-end
-
-local function IsCombatMob(model)
-    local npcVal = model:FindFirstChild("NPC")
-    if not npcVal or not npcVal:IsA("StringValue") then return false end
-    return npcVal.Value == "Combat"
-end
-
-local function IsWorldBoss(model)
-    if not IsCombatMob(model) then return false end
-    return model:FindFirstChild("WorldBoss") ~= nil
-end
 
 local function ScanNPCs()
     if not NPCESP.Enabled then return end

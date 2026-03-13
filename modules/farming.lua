@@ -36,13 +36,25 @@ local function ToggleNoRain(enabled)
         for _, c in ipairs(NoRainConns) do pcall(function() c:Disconnect() end) end; NoRainConns = {}
         pcall(function()
             local rainParts = workspace:FindFirstChild("RainParts")
-            if rainParts then RainPartsClone = rainParts:Clone(); rainParts:Destroy() end
+            if rainParts then
+                RainPartsClone = rainParts:Clone()
+                RainPartsClone.Parent = nil
+                pcall(function() rainParts:Destroy() end)
+            end
             for _, v in ipairs(Lighting:GetDescendants()) do if v:IsA("ParticleEmitter") then v.Enabled = false end end
             local terrain = workspace:FindFirstChild("Terrain")
             if terrain then for _, v in ipairs(terrain:GetDescendants()) do if v:IsA("ParticleEmitter") then v.Enabled = false end end end
         end)
         table.insert(NoRainConns, workspace.ChildAdded:Connect(function(child)
-            if child.Name == "RainParts" then pcall(function() RainPartsClone = child:Clone(); child:Destroy() end) end
+            if child.Name == "RainParts" then
+                task.defer(function()
+                    pcall(function()
+                        RainPartsClone = child:Clone()
+                        RainPartsClone.Parent = nil
+                        pcall(function() child:Destroy() end)
+                    end)
+                end)
+            end
         end))
         table.insert(NoRainConns, Lighting.DescendantAdded:Connect(function(child) if child:IsA("ParticleEmitter") then child.Enabled = false end end))
     else
