@@ -18,7 +18,7 @@ local Window = JitlerUI:CreateWindow({
     Icon = "rbxassetid://124980045936567",
     LoadingTitle = "Jitler Hub",
     LoadingSubtitle = "Loading modules...",
-    ConfigurationSaving = { Enabled = false, FolderName = "JitlerHub", FileName = "Config" },
+    ConfigurationSaving = { Enabled = true, FolderName = "JitlerHub", FileName = "Config" },
     SettingsIcon = "rbxassetid://7734053495",
 })
 
@@ -332,11 +332,22 @@ AFLeft:CreateSlider({ Name = "Check Interval", Range = { 0.5, 5 }, Increment = 0
 
 AFLeft:CreateSection("Config Management")
 
-AFLeft:CreateButton({ Name = "Save Config", Callback = function() pcall(function() JitlerUI:SaveConfiguration() end); Notify("Config saved!", 2) end })
-AFLeft:CreateToggle({ Name = "Auto Load Config", Description = "Load saved config on next launch", CurrentValue = false, Flag = "AutoLoadConfig", Callback = function(v)
-    pcall(function() if v then JitlerUI:LoadConfiguration(); Notify("Config loaded!", 2) end end)
+local configNameInput = "Config"
+AFLeft:CreateInput({ Name = "Config Name", PlaceholderText = "Config", Callback = function(v) if v and v ~= "" then configNameInput = v end end })
+AFLeft:CreateButton({ Name = "Save Config", Callback = function()
+    pcall(function()
+        Window:SetConfigurationName(configNameInput)
+        JitlerUI:SaveConfiguration()
+    end)
+    Notify("Config saved as '" .. configNameInput .. "'!", 2)
 end })
-AFLeft:CreateButton({ Name = "Overwrite Config", Callback = function() pcall(function() JitlerUI:SaveConfiguration() end); Notify("Config overwritten!", 2) end })
+AFLeft:CreateButton({ Name = "Load Config", Callback = function()
+    pcall(function()
+        Window:SetConfigurationName(configNameInput)
+        JitlerUI:LoadConfiguration()
+    end)
+    Notify("Config '" .. configNameInput .. "' loaded!", 2)
+end })
 end
 
 -- ================================================================
