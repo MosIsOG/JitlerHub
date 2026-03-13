@@ -77,7 +77,11 @@ local function StartFlying()
         if FlySystem.Keys.W then mv = mv + cam.CFrame.LookVector * spd end; if FlySystem.Keys.S then mv = mv - cam.CFrame.LookVector * spd end
         if FlySystem.Keys.A then mv = mv - cam.CFrame.RightVector * spd end; if FlySystem.Keys.D then mv = mv + cam.CFrame.RightVector * spd end
         if FlySystem.Keys.Space then mv = mv + Vector3.new(0, spd, 0) end; if FlySystem.Keys.Shift then mv = mv - Vector3.new(0, spd, 0) end
-        r.CFrame = r.CFrame + mv; r.Velocity = Vector3.zero; r.RotVelocity = Vector3.zero
+        local newPos = r.Position + mv
+        -- Stable orientation: face camera look direction (horizontal only) to prevent tilt/spin
+        local camLook = cam.CFrame.LookVector; local flatLook = Vector3.new(camLook.X, 0, camLook.Z)
+        if flatLook.Magnitude > 0.001 then flatLook = flatLook.Unit else flatLook = Vector3.new(0, 0, -1) end
+        r.CFrame = CFrame.new(newPos, newPos + flatLook); r.Velocity = Vector3.zero; r.RotVelocity = Vector3.zero
     end)
 end
 
