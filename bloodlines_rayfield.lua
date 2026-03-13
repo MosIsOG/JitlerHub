@@ -1246,15 +1246,15 @@ local Window = JitlerUI:CreateWindow({
     SettingsIcon = "rbxassetid://7734053495",
 })
 
--- Tabs
-local ESPTab = Window:CreateTab({ Name = "ESP", Icon = "rbxassetid://6523858394" })
+-- Tabs (sidebar order: Main, ESP, Teleports, Auto Farm, Misc)
 local MainTab = Window:CreateTab({ Name = "Main", Icon = "rbxassetid://11347112400" })
+local ESPTab = Window:CreateTab({ Name = "ESP", Icon = "rbxassetid://6523858394" })
 local AutoFarmTab = Window:CreateTab({ Name = "AutoFarm", Icon = "rbxassetid://130840043704422" })
 
 -- Main Sub-Tabs
 local SubMain = MainTab:CreateSubTab("Main")
-local SubQOL = MainTab:CreateSubTab("Quality Of Life")
-local SubInfo = MainTab:CreateSubTab("Information View")
+local SubQOL = MainTab:CreateSubTab("Misc")
+local SubInfo = MainTab:CreateSubTab("Teleports")
 
 -- ================================================================
 -- ESP TAB (two-column layout)
