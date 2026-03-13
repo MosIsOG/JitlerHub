@@ -8,6 +8,7 @@ local Lighting = Hub.Lighting
 local ReplicatedStorage = Hub.ReplicatedStorage
 local Notify = Hub.Notify
 local Format = Hub.Format
+local TeleportTo = Hub.TeleportTo
 
 -- ================================================================
 -- VISUAL FEATURES
