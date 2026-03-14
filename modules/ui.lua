@@ -14,11 +14,11 @@ local PressE = Hub.PressE
 -- UI CREATION
 -- ================================================================
 local Window = JitlerUI:CreateWindow({
-    Name = "Jitler Hub v2.3.3",
+    Name = "Jitler Hub v2.3.4",
     Icon = "rbxassetid://124980045936567",
     LoadingTitle = "Jitler Hub",
     LoadingSubtitle = "Loading modules...",
-    ConfigurationSaving = { Enabled = true, FolderName = "JitlerHub", FileName = "Default" },
+    ConfigurationSaving = { Enabled = false, FolderName = "JitlerHub", FileName = "Default" },
     SettingsIcon = "rbxassetid://7734053495",
 })
 
@@ -338,34 +338,64 @@ SetLeft:CreateSection("Config Profiles")
 
 local configNameInput = "Default"
 SetLeft:CreateInput({ Name = "Profile Name", PlaceholderText = "Default", Callback = function(v) configNameInput = (v and v ~= "") and v or "Default" end })
-SetLeft:CreateButton({ Name = "Save Profile", Callback = function()
+SetLeft:CreateButton({ Name = "Save Config", Callback = function()
     local profile = (configNameInput and configNameInput ~= "") and configNameInput or "Default"
     pcall(function()
         Window:SetConfigurationName(profile)
         JitlerUI:SaveConfiguration()
     end)
-    Notify("Profile saved: '" .. profile .. "'", 2)
+    Notify("Config saved: '" .. profile .. "'", 2)
 end })
-SetLeft:CreateButton({ Name = "Load Profile", Callback = function()
+SetLeft:CreateButton({ Name = "Load Config", Callback = function()
     local profile = (configNameInput and configNameInput ~= "") and configNameInput or "Default"
     pcall(function()
         Window:SetConfigurationName(profile)
         JitlerUI:LoadConfiguration()
     end)
-    Notify("Profile loaded: '" .. profile .. "'", 2)
+    Notify("Config loaded: '" .. profile .. "'", 2)
+end })
+
+SetLeft:CreateSection("Startup")
+
+local autoLoadFile = "JitlerHub/autoload.txt"
+local autoLoadProfile = ""
+
+-- Read saved autoload preference
+pcall(function()
+    if isfile and isfile(autoLoadFile) then
+        autoLoadProfile = readfile(autoLoadFile)
+    end
+end)
+
+SetLeft:CreateToggle({ Name = "Auto-Load Config on Startup", Description = "Automatically load a config profile when the hub starts", CurrentValue = (autoLoadProfile ~= ""), Callback = function(v)
+    if v then
+        local profile = (configNameInput and configNameInput ~= "") and configNameInput or "Default"
+        pcall(function() makefolder("JitlerHub") end)
+        pcall(function() writefile(autoLoadFile, profile) end)
+        Notify("Will auto-load '" .. profile .. "' on startup", 2)
+    else
+        pcall(function() if isfile and isfile(autoLoadFile) then delfile(autoLoadFile) end end)
+        Notify("Auto-load disabled", 2)
+    end
 end })
 end
 
 -- ================================================================
--- LOAD DEFAULT PROFILE ON STARTUP
+-- AUTO-LOAD CONFIG ON STARTUP
 -- ================================================================
 pcall(function()
-    Window:SetConfigurationName("Default")
-    JitlerUI:LoadConfiguration()
+    local autoLoadFile = "JitlerHub/autoload.txt"
+    if isfile and isfile(autoLoadFile) then
+        local profile = readfile(autoLoadFile)
+        if profile and profile ~= "" then
+            Window:SetConfigurationName(profile)
+            JitlerUI:LoadConfiguration()
+        end
+    end
 end)
 
 -- ================================================================
 -- FOOTER
 -- ================================================================
-Notify("Jitler Hub v2.3.3 loaded!", 3)
-print("=== Jitler Hub v2.3.3 Loaded ===")
+Notify("Jitler Hub v2.3.4 loaded!", 3)
+print("=== Jitler Hub v2.3.4 Loaded ===")
