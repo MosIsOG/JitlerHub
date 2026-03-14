@@ -18,7 +18,7 @@ local Window = JitlerUI:CreateWindow({
     Icon = "rbxassetid://124980045936567",
     LoadingTitle = "Jitler Hub",
     LoadingSubtitle = "Loading modules...",
-    ConfigurationSaving = { Enabled = false, FolderName = "JitlerHub", FileName = "Default" },
+    ConfigurationSaving = { Enabled = true, FolderName = "JitlerHub", FileName = "Default" },
     SettingsIcon = "rbxassetid://7734053495",
 })
 
@@ -26,7 +26,6 @@ local MainTab = Window:CreateTab({ Name = "Main", Icon = "rbxassetid://113471124
 local ESPTab = Window:CreateTab({ Name = "ESP", Icon = "rbxassetid://6523858394" })
 local AutoFarmTab = Window:CreateTab({ Name = "AutoFarm", Icon = "rbxassetid://130840043704422" })
 local TeleportTab = Window:CreateTab({ Name = "Teleports", Icon = "rbxassetid://139799091866771" })
-local SettingsTab = Window:CreateTab({ Name = "Settings", Icon = "rbxassetid://7734053495" })
 
 local SubMain = MainTab:CreateSubTab("Main")
 local SubQOL = MainTab:CreateSubTab("Misc")
@@ -327,72 +326,6 @@ AFLeft:CreateSection("Chakra Sense Safety")
 AFLeft:CreateToggle({ Name = "Enable Chakra Safety", Description = "Hide at Secret Spot when Chakra Sense detected", CurrentValue = false, Flag = "ChakraSafety", Callback = function(v) Hub.ChakraSafety.Enabled = v; if v then Hub.StartChakraSafety() else Hub.StopChakraSafety() end end })
 AFLeft:CreateSlider({ Name = "Check Interval", Range = { 0.5, 5 }, Increment = 0.5, Suffix = "s", CurrentValue = 1, Flag = "ChakraSafetyInterval", Callback = function(v) Hub.ChakraSafety.CheckInterval = v end })
 end
-
--- ================================================================
--- SETTINGS TAB
--- ================================================================
-do
-local SetLeft, SetRight = SettingsTab:CreateDualPane()
-
-SetLeft:CreateSection("Config Profiles")
-
-local configNameInput = "Default"
-SetLeft:CreateInput({ Name = "Profile Name", PlaceholderText = "Default", Callback = function(v) configNameInput = (v and v ~= "") and v or "Default" end })
-SetLeft:CreateButton({ Name = "Save Config", Callback = function()
-    local profile = (configNameInput and configNameInput ~= "") and configNameInput or "Default"
-    pcall(function()
-        Window:SetConfigurationName(profile)
-        JitlerUI:SaveConfiguration()
-    end)
-    Notify("Config saved: '" .. profile .. "'", 2)
-end })
-SetLeft:CreateButton({ Name = "Load Config", Callback = function()
-    local profile = (configNameInput and configNameInput ~= "") and configNameInput or "Default"
-    pcall(function()
-        Window:SetConfigurationName(profile)
-        JitlerUI:LoadConfiguration()
-    end)
-    Notify("Config loaded: '" .. profile .. "'", 2)
-end })
-
-SetLeft:CreateSection("Startup")
-
-local autoLoadFile = "JitlerHub/autoload.txt"
-local autoLoadProfile = ""
-
--- Read saved autoload preference
-pcall(function()
-    if isfile and isfile(autoLoadFile) then
-        autoLoadProfile = readfile(autoLoadFile)
-    end
-end)
-
-SetLeft:CreateToggle({ Name = "Auto-Load Config on Startup", Description = "Automatically load a config profile when the hub starts", CurrentValue = (autoLoadProfile ~= ""), Callback = function(v)
-    if v then
-        local profile = (configNameInput and configNameInput ~= "") and configNameInput or "Default"
-        pcall(function() makefolder("JitlerHub") end)
-        pcall(function() writefile(autoLoadFile, profile) end)
-        Notify("Will auto-load '" .. profile .. "' on startup", 2)
-    else
-        pcall(function() if isfile and isfile(autoLoadFile) then delfile(autoLoadFile) end end)
-        Notify("Auto-load disabled", 2)
-    end
-end })
-end
-
--- ================================================================
--- AUTO-LOAD CONFIG ON STARTUP
--- ================================================================
-pcall(function()
-    local autoLoadFile = "JitlerHub/autoload.txt"
-    if isfile and isfile(autoLoadFile) then
-        local profile = readfile(autoLoadFile)
-        if profile and profile ~= "" then
-            Window:SetConfigurationName(profile)
-            JitlerUI:LoadConfiguration()
-        end
-    end
-end)
 
 -- ================================================================
 -- FOOTER
