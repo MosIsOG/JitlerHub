@@ -336,6 +336,9 @@ local function MissionFarmLoop(target, heightOffset, attackDelay)
     MissionSystem.CurrentHeightOffset = heightOffset
     MissionSystem.CurrentAttackDelay = attackDelay
 
+    -- Start charging + animation
+    if Hub.StartCharging then Hub.StartCharging() end
+
     MissionSystem.AnchorConn = RunService.Heartbeat:Connect(function()
         pcall(function()
             if not MissionSystem.ActiveMission then return end
@@ -369,6 +372,7 @@ local function MissionFarmLoop(target, heightOffset, attackDelay)
 end
 
 local function StopMissionFarm()
+    if Hub.StopCharging then Hub.StopCharging() end
     if MissionSystem.AnchorConn then MissionSystem.AnchorConn:Disconnect(); MissionSystem.AnchorConn = nil end
     if MissionSystem.AttackThread then pcall(task.cancel, MissionSystem.AttackThread); MissionSystem.AttackThread = nil end
     MissionSystem.CurrentTarget = nil

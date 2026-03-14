@@ -80,6 +80,52 @@ Hub.ToggleNoRain = ToggleNoRain
 Hub.ToggleFullBright = ToggleFullBright
 
 -- ================================================================
+-- CHARGING + ANIMATION HELPERS (used by Boss Farm & Mission Farm)
+-- ================================================================
+local CHARGE_ANIM_ID = "rbxassetid://9864206537"
+local ChargingState = { Active = false, AnimTrack = nil }
+
+local function StartCharging()
+    if ChargingState.Active then return end
+    ChargingState.Active = true
+    pcall(function()
+        Hub.RefreshDataEvent()
+        if Hub.DataEvent then Hub.DataEvent:FireServer("Charging") end
+    end)
+    pcall(function()
+        local char = LocalPlayer.Character; if not char then return end
+        local hum = char:FindFirstChildOfClass("Humanoid"); if not hum then return end
+        local animator = hum:FindFirstChildOfClass("Animator")
+        if not animator then animator = Instance.new("Animator"); animator.Parent = hum end
+        local anim = Instance.new("Animation")
+        anim.AnimationId = CHARGE_ANIM_ID
+        local track = animator:LoadAnimation(anim)
+        track.Looped = true
+        track:Play()
+        ChargingState.AnimTrack = track
+    end)
+end
+
+local function StopCharging()
+    if not ChargingState.Active then return end
+    ChargingState.Active = false
+    pcall(function()
+        if ChargingState.AnimTrack then
+            ChargingState.AnimTrack:Stop()
+            ChargingState.AnimTrack = nil
+        end
+    end)
+    pcall(function()
+        Hub.RefreshDataEvent()
+        if Hub.DataEvent then Hub.DataEvent:FireServer("StopCharging") end
+    end)
+end
+
+Hub.StartCharging = StartCharging
+Hub.StopCharging = StopCharging
+Hub.ChargingState = ChargingState
+
+-- ================================================================
 -- BULK SELLER (Direct Remote)
 -- ================================================================
 local TRINKET_VALUES = {
@@ -346,13 +392,14 @@ local function StartBossFarm()
     if BossFarm.TargetName == "Manda" then MonitorMandaAnimations(model) end
     if BossFarm.TargetName == "Haku Boss" then MonitorHakuBossIceDragon() end
     if Hub.DataEvent and BossFarm.WeaponName ~= "" then pcall(function() Hub.DataEvent:FireServer("Item", "Selected", BossFarm.WeaponName) end) end
-    task.wait(0.5); Notify("Farming: " .. BossFarm.TargetName, 3)
+    task.wait(0.5); StartCharging(); Notify("Farming: " .. BossFarm.TargetName, 3)
 
     BossFarm.AnchorConn = RunService.Heartbeat:Connect(function()
         pcall(function()
             if not BossFarm.Enabled then return end; local h = BossFarm.Target
             if not h or not h.Parent or h.Health <= 0 then
                 local deadName = BossFarm.TargetName; BossFarm.Enabled = false
+                StopCharging()
                 if BossFarm.AnchorConn then BossFarm.AnchorConn:Disconnect(); BossFarm.AnchorConn = nil end
                 if BossFarm.Thread then pcall(task.cancel, BossFarm.Thread); BossFarm.Thread = nil end
                 if BossFarm.AutoLootOnKill then task.spawn(function() pcall(CollectBossLoot, deadName) end) end; return
@@ -377,6 +424,7 @@ local function StartBossFarm()
 end
 
 local function StopBossFarm()
+    StopCharging()
     BossFarm.Enabled = false; BossFarm.HyugaHeightBoost = 0; BossFarm.HyugaInVoid = false; BossFarm.HakuSafeSpot = false; BossFarm.LavaSnakeHeightBoost = 0; BossFarm.MandaHeightBoost = 0
     if BossFarm.HyugaVoidConn then task.cancel(BossFarm.HyugaVoidConn); BossFarm.HyugaVoidConn = nil end
     if BossFarm.HyugaAnimConnection then BossFarm.HyugaAnimConnection:Disconnect(); BossFarm.HyugaAnimConnection = nil end

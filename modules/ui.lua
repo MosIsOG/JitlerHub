@@ -155,11 +155,7 @@ QRight:CreateButton({ Name = "Reset Character", Callback = function() local char
 QRight:CreateButton({ Name = "Random Server Hop", Callback = function() Hub.DoServerHop("random") end })
 QRight:CreateButton({ Name = "Low Player Server", Callback = function() Hub.DoServerHop("min") end })
 
-QRight:CreateSection("Hitbox Extender")
 
-QRight:CreateToggle({ Name = "Enable Hitbox Extender", Description = "Extend target HumanoidRootPart size", CurrentValue = false, Flag = "HitboxExtender", Callback = function(v) Hub.HitboxExtender.Enabled = v; if v then Hub.StartHitbox() else Hub.StopHitbox() end end })
-QRight:CreateSlider({ Name = "Hitbox Size", Range = { 2, 50 }, Increment = 0.5, Suffix = " studs", CurrentValue = 5, Flag = "HitboxSize", Callback = function(v) Hub.HitboxExtender.Size = v end })
-QRight:CreateToggle({ Name = "Show Hitbox Radius", Description = "Red sphere indicator on targets", CurrentValue = false, Flag = "ShowHitboxRadius", Callback = function(v) Hub.HitboxExtender.ShowRadius = v end })
 end
 
 -- ================================================================
