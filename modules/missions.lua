@@ -402,12 +402,20 @@ local function MonitorKnockedForGrip(model)
     if not knocked then return end
     task.spawn(function()
         while MissionSystem.ActiveMission and model and model.Parent do
+            local isKnocked = false
             pcall(function()
                 if knocked.Value == true or (type(knocked.Value) == "string" and knocked.Value:upper() == "ON") or (type(knocked.Value) == "number" and knocked.Value ~= 0) then
-                    if Hub.DataEvent then Hub.DataEvent:FireServer("Grip") end
+                    isKnocked = true
                 end
             end)
-            task.wait(0.3)
+            if isKnocked then
+                Hub.Notify("Mob knocked! Gripping...", 2)
+                if Hub.DataEvent then pcall(function() Hub.DataEvent:FireServer("Grip") end) end
+                task.wait(0.5)
+                StopMissionFarm()
+                return
+            end
+            task.wait(0.2)
         end
     end)
 end

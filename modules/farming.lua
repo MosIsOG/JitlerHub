@@ -287,7 +287,7 @@ local KNOWN_WEAPON_SET = {}; for _, w in ipairs(KNOWN_WEAPONS) do KNOWN_WEAPON_S
 
 -- Weapon-specific height adjustments
 local WEAPON_HEIGHT_BOOSTS = {
-    ["Onyx Asumai"] = -3,
+    ["Onyx Asumai"] = -2,
 }
 
 local function ScanHotbarForWeapon()
@@ -322,6 +322,7 @@ local BossFarm = {
     LavaSnakeHeightBoost = 0, LavaSnakeAnimConnection = nil,
     MandaHeightBoost = 0, MandaAnimConnection = nil,
     HakuAnimConnection = nil, HakuSafeSpot = false, HakuSafeSpotEndTime = 0, AutoLootOnKill = false,
+    KnockedThread = nil,
 }
 
 local BossConfigs = {
@@ -403,6 +404,31 @@ local function MonitorHakuBossIceDragon()
     BossFarm.HakuAnimConnection = debris.ChildAdded:Connect(function(child) if not BossFarm.Enabled then return end; local dur = child.Name == "IceDragonHead" and 4 or (child:IsA("Beam") and child.Name == "Beam121") and 1 or nil; if dur then local char = LocalPlayer.Character; if char and char:FindFirstChild("HumanoidRootPart") then char.HumanoidRootPart.CFrame = CFrame.new(-2969.2, 1832.9, -9610.4); BossFarm.HakuSafeSpot = true; BossFarm.HakuSafeSpotEndTime = tick() + dur end end end)
 end
 
+local function MonitorBossKnocked(model)
+    if BossFarm.KnockedThread then pcall(task.cancel, BossFarm.KnockedThread); BossFarm.KnockedThread = nil end
+    if not model then return end
+    local settings = model:FindFirstChild("Settings"); if not settings then return end
+    local knocked = settings:FindFirstChild("Knocked"); if not knocked then return end
+    BossFarm.KnockedThread = task.spawn(function()
+        while BossFarm.Enabled and model and model.Parent do
+            local isKnocked = false
+            pcall(function()
+                if knocked.Value == true or (type(knocked.Value) == "string" and knocked.Value:upper() == "ON") or (type(knocked.Value) == "number" and knocked.Value ~= 0) then
+                    isKnocked = true
+                end
+            end)
+            if isKnocked then
+                Notify("Mob knocked! Gripping...", 2)
+                if Hub.DataEvent then pcall(function() Hub.DataEvent:FireServer("Grip") end) end
+                task.wait(0.5)
+                StopBossFarm()
+                return
+            end
+            task.wait(0.2)
+        end
+    end)
+end
+
 local function StartBossFarm()
     if BossFarm.AnchorConn then BossFarm.AnchorConn:Disconnect() end; if BossFarm.Thread then pcall(task.cancel, BossFarm.Thread) end
     local config = BossConfigs[BossFarm.SelectedBoss]
@@ -428,6 +454,7 @@ local function StartBossFarm()
     if BossFarm.TargetName == "Lava Snake" then MonitorLavaSnakeAnimations(model) end
     if BossFarm.TargetName == "Manda" then MonitorMandaAnimations(model) end
     if BossFarm.TargetName == "Haku Boss" then MonitorHakuBossIceDragon() end
+    MonitorBossKnocked(model)
     -- Auto-detect weapon from hotbar if not manually set
     local detectedWeapon = ScanHotbarForWeapon()
     if detectedWeapon then
@@ -475,6 +502,7 @@ local function StopBossFarm()
     if BossFarm.HakuAnimConnection then BossFarm.HakuAnimConnection:Disconnect(); BossFarm.HakuAnimConnection = nil end
     if BossFarm.LavaSnakeAnimConnection then BossFarm.LavaSnakeAnimConnection:Disconnect(); BossFarm.LavaSnakeAnimConnection = nil end
     if BossFarm.MandaAnimConnection then BossFarm.MandaAnimConnection:Disconnect(); BossFarm.MandaAnimConnection = nil end
+    if BossFarm.KnockedThread then pcall(task.cancel, BossFarm.KnockedThread); BossFarm.KnockedThread = nil end
     if BossFarm.AnchorConn then BossFarm.AnchorConn:Disconnect(); BossFarm.AnchorConn = nil end
     if BossFarm.Thread then pcall(task.cancel, BossFarm.Thread); BossFarm.Thread = nil end
 end
