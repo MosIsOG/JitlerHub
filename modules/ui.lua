@@ -18,7 +18,7 @@ local Window = JitlerUI:CreateWindow({
     Icon = "rbxassetid://124980045936567",
     LoadingTitle = "Jitler Hub",
     LoadingSubtitle = "Loading modules...",
-    ConfigurationSaving = { Enabled = true, FolderName = "JitlerHub", FileName = "Config" },
+    ConfigurationSaving = { Enabled = false, FolderName = "JitlerHub", FileName = "Default" },
     SettingsIcon = "rbxassetid://7734053495",
 })
 
@@ -326,25 +326,35 @@ AFLeft:CreateSection("Chakra Sense Safety")
 AFLeft:CreateToggle({ Name = "Enable Chakra Safety", Description = "Hide at Secret Spot when Chakra Sense detected", CurrentValue = false, Flag = "ChakraSafety", Callback = function(v) Hub.ChakraSafety.Enabled = v; if v then Hub.StartChakraSafety() else Hub.StopChakraSafety() end end })
 AFLeft:CreateSlider({ Name = "Check Interval", Range = { 0.5, 5 }, Increment = 0.5, Suffix = "s", CurrentValue = 1, Flag = "ChakraSafetyInterval", Callback = function(v) Hub.ChakraSafety.CheckInterval = v end })
 
-AFLeft:CreateSection("Config Management")
+AFLeft:CreateSection("Config Profiles")
 
-local configNameInput = "Config"
-AFLeft:CreateInput({ Name = "Config Name", PlaceholderText = "Config", Callback = function(v) if v and v ~= "" then configNameInput = v end end })
-AFLeft:CreateButton({ Name = "Save Config", Callback = function()
+local configNameInput = "Default"
+AFLeft:CreateInput({ Name = "Profile Name", PlaceholderText = "Default", Callback = function(v) configNameInput = (v and v ~= "") and v or "Default" end })
+AFLeft:CreateButton({ Name = "Save Profile", Callback = function()
+    local profile = (configNameInput and configNameInput ~= "") and configNameInput or "Default"
     pcall(function()
-        Window:SetConfigurationName(configNameInput)
+        Window:SetConfigurationName(profile)
         JitlerUI:SaveConfiguration()
     end)
-    Notify("Config saved as '" .. configNameInput .. "'!", 2)
+    Notify("Profile saved: '" .. profile .. "'", 2)
 end })
-AFLeft:CreateButton({ Name = "Load Config", Callback = function()
+AFLeft:CreateButton({ Name = "Load Profile", Callback = function()
+    local profile = (configNameInput and configNameInput ~= "") and configNameInput or "Default"
     pcall(function()
-        Window:SetConfigurationName(configNameInput)
+        Window:SetConfigurationName(profile)
         JitlerUI:LoadConfiguration()
     end)
-    Notify("Config '" .. configNameInput .. "' loaded!", 2)
+    Notify("Profile loaded: '" .. profile .. "'", 2)
 end })
 end
+
+-- ================================================================
+-- LOAD DEFAULT PROFILE ON STARTUP
+-- ================================================================
+pcall(function()
+    Window:SetConfigurationName("Default")
+    JitlerUI:LoadConfiguration()
+end)
 
 -- ================================================================
 -- FOOTER
