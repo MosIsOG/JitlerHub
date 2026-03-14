@@ -419,7 +419,19 @@ local function MonitorBossKnocked(model)
             end)
             if isKnocked then
                 Notify("Mob knocked! Gripping...", 2)
-                if Hub.DataEvent then pcall(function() Hub.DataEvent:FireServer("Grip") end) end
+                -- Stop anchor and attack so we can move to the mob
+                if BossFarm.AnchorConn then BossFarm.AnchorConn:Disconnect(); BossFarm.AnchorConn = nil end
+                if BossFarm.Thread then pcall(task.cancel, BossFarm.Thread); BossFarm.Thread = nil end
+                StopCharging()
+                -- Teleport to mob and grip
+                local bossRoot = GetBossRoot(model)
+                if bossRoot then
+                    local char = LocalPlayer.Character
+                    local root = char and char:FindFirstChild("HumanoidRootPart")
+                    if root then root.CFrame = CFrame.new(bossRoot.Position) end
+                    task.wait(0.1)
+                    if Hub.DataEvent then pcall(function() Hub.DataEvent:FireServer("Grip") end) end
+                end
                 task.wait(0.5)
                 StopBossFarm()
                 return

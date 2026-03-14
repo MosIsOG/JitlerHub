@@ -410,7 +410,19 @@ local function MonitorKnockedForGrip(model)
             end)
             if isKnocked then
                 Hub.Notify("Mob knocked! Gripping...", 2)
-                if Hub.DataEvent then pcall(function() Hub.DataEvent:FireServer("Grip") end) end
+                -- Stop anchor and attack so we can move to the mob
+                if MissionSystem.AnchorConn then MissionSystem.AnchorConn:Disconnect(); MissionSystem.AnchorConn = nil end
+                if MissionSystem.AttackThread then pcall(task.cancel, MissionSystem.AttackThread); MissionSystem.AttackThread = nil end
+                Hub.StopCharging()
+                -- Teleport to mob and grip
+                local mobRoot = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Head") or model:FindFirstChildWhichIsA("BasePart")
+                if mobRoot then
+                    local char = Hub.LocalPlayer.Character
+                    local root = char and char:FindFirstChild("HumanoidRootPart")
+                    if root then root.CFrame = CFrame.new(mobRoot.Position) end
+                    task.wait(0.1)
+                    if Hub.DataEvent then pcall(function() Hub.DataEvent:FireServer("Grip") end) end
+                end
                 task.wait(0.5)
                 StopMissionFarm()
                 return
