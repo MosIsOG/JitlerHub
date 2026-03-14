@@ -511,6 +511,12 @@ local function ExecuteMissionCase(missionName)
             task.wait(2)
         end
         if not cpModel then Notify("Corrupted Point not found after retries!", 3); MissionSystem.ActiveMission = nil; return "failed" end
+        -- Equip weapon and start charging
+        if Hub.ScanHotbarForWeapon then
+            local detectedWeapon = Hub.ScanHotbarForWeapon()
+            if detectedWeapon and Hub.DataEvent then pcall(function() Hub.DataEvent:FireServer("Item", "Selected", detectedWeapon) end) end
+        end
+        if Hub.StartCharging then Hub.StartCharging() end
         -- Teleport to it with -5 Y offset, facing up toward the CorruptedPoint
         local cpPart = cpModel:FindFirstChildWhichIsA("BasePart")
         if cpPart then
@@ -548,6 +554,7 @@ local function ExecuteMissionCase(missionName)
                 end)
                 task.wait(0.12)
             end
+            if Hub.StopCharging then Hub.StopCharging() end
         end)
         local result = WaitForMissionResult(180)
         StopMissionFarm(); MissionSystem.ActiveMission = nil; return result
