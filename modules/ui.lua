@@ -14,7 +14,7 @@ local PressE = Hub.PressE
 -- UI CREATION
 -- ================================================================
 local Window = JitlerUI:CreateWindow({
-    Name = "Jitler Hub v2.0",
+    Name = "Jitler Hub v2.3.3",
     Icon = "rbxassetid://124980045936567",
     LoadingTitle = "Jitler Hub",
     LoadingSubtitle = "Loading modules...",
@@ -359,5 +359,5 @@ end)
 -- ================================================================
 -- FOOTER
 -- ================================================================
-Notify("Jitler Hub v2.3.2 loaded!", 3)
-print("=== Jitler Hub v2.3.2 Loaded ===")
+Notify("Jitler Hub v2.3.3 loaded!", 3)
+print("=== Jitler Hub v2.3.3 Loaded ===")
