@@ -277,9 +277,46 @@ local trinketNames = {
 }
 local TrinketSet = {}; for _, n in ipairs(trinketNames) do TrinketSet[n] = true end
 
+-- Known weapon names for hotbar auto-detect (priority order)
+local KNOWN_WEAPONS = {
+    "Onyx Resanagi", "Golden Resanagi", "Silver Resanagi",
+    "Onyx Zabunagi", "Golden Zabunagi", "Silver Zabunagi",
+    "Onyx Asumai",
+}
+local KNOWN_WEAPON_SET = {}; for _, w in ipairs(KNOWN_WEAPONS) do KNOWN_WEAPON_SET[w] = true end
+
+-- Weapon-specific height adjustments
+local WEAPON_HEIGHT_BOOSTS = {
+    ["Onyx Asumai"] = -3,
+}
+
+local function ScanHotbarForWeapon()
+    local found = nil
+    pcall(function()
+        local gui = LocalPlayer.PlayerGui
+        local clientGui = gui and gui:FindFirstChild("ClientGui")
+        local mainframe = clientGui and clientGui:FindFirstChild("Mainframe")
+        local loadout = mainframe and mainframe:FindFirstChild("Loadout")
+        if not loadout then return end
+        for j = 1, 11 do
+            local slot = loadout:FindFirstChild("Slot" .. j)
+            if not slot then continue end
+            local slotText = slot:FindFirstChild("SlotText")
+            local itemName = slotText and slotText:IsA("TextLabel") and slotText.Text or ""
+            if itemName ~= "" and KNOWN_WEAPON_SET[itemName] then
+                found = itemName; return
+            end
+        end
+    end)
+    return found
+end
+
+Hub.ScanHotbarForWeapon = ScanHotbarForWeapon
+Hub.WEAPON_HEIGHT_BOOSTS = WEAPON_HEIGHT_BOOSTS
+
 local BossFarm = {
     Enabled = false, Target = nil, TargetName = "", SelectedBoss = "Wooden Golem",
-    WeaponName = "Onyx Resanagi", HeightOffset = 50, AttackDelay = 0.12,
+    WeaponName = "Onyx Resanagi", HeightOffset = 50, AttackDelay = 0.12, WeaponHeightBoost = 0,
     Thread = nil, AnchorConn = nil,
     HyugaHeightBoost = 0, HyugaAnimConnection = nil, HyugaInVoid = false, HyugaVoidConn = nil,
     LavaSnakeHeightBoost = 0, LavaSnakeAnimConnection = nil,
@@ -289,8 +326,8 @@ local BossFarm = {
 
 local BossConfigs = {
     ["Wooden Golem"] = { height = 16 }, ["Hyuga Boss"] = { height = 10.75 }, ["Lava Snake"] = { height = 38 },
-    ["Haku Boss"] = { height = 10.75 }, ["Barbarit The Rose"] = { height = 13 }, ["Manda"] = { height = 38 },
-    ["Tairock"] = { height = 10.75 }, ["The Barbarian"] = { height = 13 },
+    ["Haku Boss"] = { height = 10.75 }, ["Barbarit The Rose"] = { height = 14 }, ["Manda"] = { height = 38 },
+    ["Tairock"] = { height = 10.75 }, ["The Barbarian"] = { height = 14 },
 }
 local BossLootSpots = {
     ["Hyuga Boss"] = Vector3.new(-663.8, -359.9, -728.9), ["Wooden Golem"] = Vector3.new(-4716.2, 344.1, -2932.0),
@@ -391,6 +428,13 @@ local function StartBossFarm()
     if BossFarm.TargetName == "Lava Snake" then MonitorLavaSnakeAnimations(model) end
     if BossFarm.TargetName == "Manda" then MonitorMandaAnimations(model) end
     if BossFarm.TargetName == "Haku Boss" then MonitorHakuBossIceDragon() end
+    -- Auto-detect weapon from hotbar if not manually set
+    local detectedWeapon = ScanHotbarForWeapon()
+    if detectedWeapon then
+        BossFarm.WeaponName = detectedWeapon
+        Notify("Auto-detected weapon: " .. detectedWeapon, 2)
+    end
+    BossFarm.WeaponHeightBoost = WEAPON_HEIGHT_BOOSTS[BossFarm.WeaponName] or 0
     if Hub.DataEvent and BossFarm.WeaponName ~= "" then pcall(function() Hub.DataEvent:FireServer("Item", "Selected", BossFarm.WeaponName) end) end
     task.wait(0.5); StartCharging(); Notify("Farming: " .. BossFarm.TargetName, 3)
 
@@ -409,7 +453,7 @@ local function StartBossFarm()
             if BossFarm.HakuSafeSpot and tick() >= BossFarm.HakuSafeSpotEndTime then BossFarm.HakuSafeSpot = false end
             if BossFarm.HyugaInVoid then root.CFrame = CFrame.new(HYUGA_VOID_SAFE_SPOT)
             elseif BossFarm.HakuSafeSpot then root.CFrame = CFrame.new(-2969.2, 1832.9, -9610.4)
-            else root.CFrame = CFrame.lookAt(bossRoot.Position + Vector3.new(0, BossFarm.HeightOffset + BossFarm.HyugaHeightBoost + BossFarm.LavaSnakeHeightBoost + BossFarm.MandaHeightBoost, 0), bossRoot.Position) end
+            else root.CFrame = CFrame.lookAt(bossRoot.Position + Vector3.new(0, BossFarm.HeightOffset + BossFarm.HyugaHeightBoost + BossFarm.LavaSnakeHeightBoost + BossFarm.MandaHeightBoost + BossFarm.WeaponHeightBoost, 0), bossRoot.Position) end
         end)
     end)
 
@@ -425,7 +469,7 @@ end
 
 local function StopBossFarm()
     StopCharging()
-    BossFarm.Enabled = false; BossFarm.HyugaHeightBoost = 0; BossFarm.HyugaInVoid = false; BossFarm.HakuSafeSpot = false; BossFarm.LavaSnakeHeightBoost = 0; BossFarm.MandaHeightBoost = 0
+    BossFarm.Enabled = false; BossFarm.HyugaHeightBoost = 0; BossFarm.HyugaInVoid = false; BossFarm.HakuSafeSpot = false; BossFarm.LavaSnakeHeightBoost = 0; BossFarm.MandaHeightBoost = 0; BossFarm.WeaponHeightBoost = 0
     if BossFarm.HyugaVoidConn then task.cancel(BossFarm.HyugaVoidConn); BossFarm.HyugaVoidConn = nil end
     if BossFarm.HyugaAnimConnection then BossFarm.HyugaAnimConnection:Disconnect(); BossFarm.HyugaAnimConnection = nil end
     if BossFarm.HakuAnimConnection then BossFarm.HakuAnimConnection:Disconnect(); BossFarm.HakuAnimConnection = nil end
@@ -879,6 +923,7 @@ local BuyItemsData = {
     { Name = "Silver Zabunagi", Price = 50, Workspace = "Silver Zabunagi" },
     { Name = "Golden Zabunagi", Price = 70, Workspace = "Silver Zabunagi" },
     { Name = "Onyx Zabunagi", Price = 90, Workspace = "Onyx Zabunagi" },
+    { Name = "Onyx Asumai", Price = 70, Workspace = "Onyx Asumai" },
 }
 local BuyItemsLookup = {}
 local BuyItemNames = {}

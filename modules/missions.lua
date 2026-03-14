@@ -336,6 +336,19 @@ local function MissionFarmLoop(target, heightOffset, attackDelay)
     MissionSystem.CurrentHeightOffset = heightOffset
     MissionSystem.CurrentAttackDelay = attackDelay
 
+    -- Auto-detect weapon from hotbar and equip it
+    local weaponHeightBoost = 0
+    if Hub.ScanHotbarForWeapon then
+        local detectedWeapon = Hub.ScanHotbarForWeapon()
+        if detectedWeapon then
+            if Hub.DataEvent then pcall(function() Hub.DataEvent:FireServer("Item", "Selected", detectedWeapon) end) end
+            if Hub.WEAPON_HEIGHT_BOOSTS and Hub.WEAPON_HEIGHT_BOOSTS[detectedWeapon] then
+                weaponHeightBoost = Hub.WEAPON_HEIGHT_BOOSTS[detectedWeapon]
+            end
+        end
+    end
+    local effectiveHeight = heightOffset + weaponHeightBoost
+
     -- Start charging + animation
     if Hub.StartCharging then Hub.StartCharging() end
 
@@ -345,7 +358,7 @@ local function MissionFarmLoop(target, heightOffset, attackDelay)
             if not hum or not hum.Parent or hum.Health <= 0 then return end
             local bossRoot = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Head") or model:FindFirstChildWhichIsA("BasePart"); if not bossRoot then return end
             local char = LocalPlayer.Character; if not char then return end; local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
-            root.CFrame = CFrame.lookAt(bossRoot.Position + Vector3.new(0, heightOffset, 0), bossRoot.Position)
+            root.CFrame = CFrame.lookAt(bossRoot.Position + Vector3.new(0, effectiveHeight, 0), bossRoot.Position)
         end)
     end)
 
