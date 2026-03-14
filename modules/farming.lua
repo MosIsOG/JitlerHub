@@ -394,7 +394,7 @@ end
 local function MonitorMandaAnimations(bossModel)
     if BossFarm.MandaAnimConnection then BossFarm.MandaAnimConnection:Disconnect(); BossFarm.MandaAnimConnection = nil end
     if not bossModel then return end; local hum = bossModel:FindFirstChildOfClass("Humanoid"); if not hum then return end; local animator = hum:FindFirstChildOfClass("Animator"); if not animator then return end
-    BossFarm.MandaAnimConnection = animator.AnimationPlayed:Connect(function(track) if not BossFarm.Enabled then return end; local assetId = track.Animation.AnimationId:match("rbxassetid://(%d+)") or track.Animation.AnimationId; if assetId == "9954909571" then BossFarm.MandaHeightBoost = 10; task.spawn(function() while track and track.IsPlaying and BossFarm.Enabled do task.wait(0.1) end; task.wait(0.5); BossFarm.MandaHeightBoost = 0 end) end end)
+    BossFarm.MandaAnimConnection = animator.AnimationPlayed:Connect(function(track) if not BossFarm.Enabled then return end; local assetId = track.Animation.AnimationId:match("rbxassetid://(%d+)") or track.Animation.AnimationId; if assetId == "9954909571" then BossFarm.MandaHeightBoost = 15; task.spawn(function() while track and track.IsPlaying and BossFarm.Enabled do task.wait(0.1) end; task.wait(0.5); BossFarm.MandaHeightBoost = 0 end) end end)
 end
 
 local function MonitorHakuBossIceDragon()

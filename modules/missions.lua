@@ -25,6 +25,7 @@ local MissionSystem = {
     CurrentTarget = nil,
     CurrentHeightOffset = nil,
     CurrentAttackDelay = nil,
+    ExtraHeightBoost = 0,
 }
 
 local VALID_VILLAGES = { Snow = true, Sorythia = true, Rain = true, Durana = true, Rogue = true }
@@ -358,7 +359,7 @@ local function MissionFarmLoop(target, heightOffset, attackDelay)
             if not hum or not hum.Parent or hum.Health <= 0 then return end
             local bossRoot = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Head") or model:FindFirstChildWhichIsA("BasePart"); if not bossRoot then return end
             local char = LocalPlayer.Character; if not char then return end; local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
-            root.CFrame = CFrame.lookAt(bossRoot.Position + Vector3.new(0, effectiveHeight, 0), bossRoot.Position)
+            root.CFrame = CFrame.lookAt(bossRoot.Position + Vector3.new(0, effectiveHeight + MissionSystem.ExtraHeightBoost, 0), bossRoot.Position)
         end)
     end)
 
@@ -391,6 +392,7 @@ local function StopMissionFarm()
     MissionSystem.CurrentTarget = nil
     MissionSystem.CurrentHeightOffset = nil
     MissionSystem.CurrentAttackDelay = nil
+    MissionSystem.ExtraHeightBoost = 0
 end
 
 local function MonitorKnockedForGrip(model)
@@ -439,22 +441,22 @@ local function ExecuteMissionCase(missionName)
 
     elseif missionName == "Bandit Camp" then
         local function farmBandits()
-            for attempt = 1, 10 do
+            for attempt = 1, 30 do
                 if not MissionSystem.ActiveMission then return "cancelled" end
                 if CheckNotification("Mission Complete") then return "complete" end
                 local targets = FindNPCNear(markerPos, 300, "Bandit")
                 if #targets == 0 then
                     if CheckNotification("Mission Complete") then return "complete" end
-                    task.wait(1); continue
+                    task.wait(2); continue
                 end
-                for _, target in ipairs(targets) do
-                    if not MissionSystem.ActiveMission then return "cancelled" end
-                    MissionFarmLoop(target, 10.75, 0.12)
-                    while MissionSystem.ActiveMission and target.humanoid and target.humanoid.Parent and target.humanoid.Health > 0 do task.wait(0.3) end
-                    StopMissionFarm()
-                    if CheckNotification("Mission Complete") then return "complete" end
-                end
-                task.wait(1)
+                -- Attack the first alive bandit
+                local target = targets[1]
+                if not MissionSystem.ActiveMission then return "cancelled" end
+                MissionFarmLoop(target, 10.75, 0.12)
+                while MissionSystem.ActiveMission and target.humanoid and target.humanoid.Parent and target.humanoid.Health > 0 do task.wait(0.3) end
+                StopMissionFarm()
+                if CheckNotification("Mission Complete") then return "complete" end
+                task.wait(0.5)
             end
             return WaitForMissionResult(30)
         end
@@ -518,6 +520,9 @@ local function ExecuteMissionCase(missionName)
                 if Hub.ChakraSafety and Hub.ChakraSafety.Hiding then task.wait(0.5); continue end
                 pcall(function()
                     if Hub.DataEvent then
+                        local cpPartNow = cpModel:FindFirstChildWhichIsA("BasePart")
+                        if cpPartNow then Hub.DataEvent:FireServer("Dash", "Sub", cpPartNow.Position) end
+                        task.wait(0.05)
                         Hub.DataEvent:FireServer("CheckMeleeHit", nil, "NormalAttack", false)
                     end
                 end)
@@ -544,6 +549,15 @@ local function ExecuteMissionCase(missionName)
                 local mandaConn
                 mandaConn = animator.AnimationPlayed:Connect(function(track)
                     if not MissionSystem.ActiveMission then mandaConn:Disconnect(); return end
+                    local assetId = track.Animation.AnimationId:match("rbxassetid://(%d+)") or track.Animation.AnimationId
+                    if assetId == "9954909571" then
+                        MissionSystem.ExtraHeightBoost = 15
+                        task.spawn(function()
+                            while track and track.IsPlaying and MissionSystem.ActiveMission do task.wait(0.1) end
+                            task.wait(0.5)
+                            MissionSystem.ExtraHeightBoost = 0
+                        end)
+                    end
                 end)
             end
         end)
