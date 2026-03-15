@@ -443,6 +443,19 @@ Hub.StopPlayerHighlight = StopPlayerHighlight
 
 -- ================================================================
 -- MOB ESP SYSTEM
+-- CorruptedPoint ESP
+local CorruptedPointESP = { Enabled = false, Thread = nil }
+local function StartCorruptedPointESP()
+    CorruptedPointESP.Enabled = true
+    -- Add actual ESP logic here
+end
+local function StopCorruptedPointESP()
+    CorruptedPointESP.Enabled = false
+    -- Cleanup logic
+end
+Hub.CorruptedPointESP = CorruptedPointESP
+Hub.StartCorruptedPointESP = StartCorruptedPointESP
+Hub.StopCorruptedPointESP = StopCorruptedPointESP
 -- ================================================================
 local MobESP = { Enabled = false, MaxDistance = 500, TextSize = 14, ScanInterval = 2, TrackedMobs = {}, ScanThread = nil, RenderConn = nil }
 local MOB_FOLDERS = { "NPCs", "Mobs", "Enemies" }

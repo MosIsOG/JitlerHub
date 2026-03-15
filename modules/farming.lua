@@ -263,6 +263,28 @@ Hub.BulkSellFruits = BulkSellFruits
 
 -- ================================================================
 -- BOSS FARM
+local function PlayerSafetyCheck()
+    local char = LocalPlayer.Character; if not char then return false end
+    local hum = char:FindFirstChildOfClass("Humanoid"); if not hum or hum.Health <= 0 then return false end
+    return true
+end
+Hub.PlayerSafetyCheck = PlayerSafetyCheck
+local function AutoUseSkill(skillName)
+    local remote = ReplicatedStorage:FindFirstChild("UseSkill")
+    if not remote then Notify("No skill remote found!", 2); return end
+    pcall(function() remote:FireServer(skillName) end)
+    Notify("Auto-used skill: " .. tostring(skillName), 2)
+end
+Hub.AutoUseSkill = AutoUseSkill
+local function BuyRamen()
+    local ramenShop = workspace:FindFirstChild("RamenShop")
+    if not ramenShop then Notify("No ramen shop found!", 2); return end
+    local remote = ReplicatedStorage:FindFirstChild("BuyRamen")
+    if not remote then Notify("No ramen remote found!", 2); return end
+    pcall(function() remote:FireServer() end)
+    Notify("Bought ramen!", 2)
+end
+Hub.BuyRamen = BuyRamen
 -- ================================================================
 local trinketNames = {
     "Gold Bracelet", "Gold Ring", "Silver Ring", "Silver Bracelet", "Silver Necklace", "Gold Necklace",
@@ -277,7 +299,6 @@ local trinketNames = {
 }
 local TrinketSet = {}; for _, n in ipairs(trinketNames) do TrinketSet[n] = true end
 
--- Known weapon names for hotbar auto-detect (priority order)
 local KNOWN_WEAPONS = {
     "Onyx Resanagi", "Golden Resanagi", "Silver Resanagi",
     "Onyx Zabunagi", "Golden Zabunagi", "Silver Zabunagi",
@@ -285,11 +306,16 @@ local KNOWN_WEAPONS = {
 }
 local KNOWN_WEAPON_SET = {}; for _, w in ipairs(KNOWN_WEAPONS) do KNOWN_WEAPON_SET[w] = true end
 
--- Weapon-specific height adjustments
 local WEAPON_HEIGHT_BOOSTS = {
     ["Onyx Asumai"] = -3,
     ["Fist"] = -2,
 }
+local function AdvancedBossLoop()
+     -- Advanced boss loop logic stub
+     Notify("Advanced boss loop started!", 2)
+     -- Add actual loop logic here
+end
+Hub.AdvancedBossLoop = AdvancedBossLoop
 
 local function ScanHotbarForWeapon()
     local found = nil
@@ -556,6 +582,34 @@ Hub.autoEyeLoop = autoEyeLoop
 
 -- ================================================================
 -- AUTO GRIP FARM
+local AutoGripFarm = { Enabled = false, Thread = nil, RetryCount = 0, MaxRetries = 3 }
+
+local function StartAutoGripFarm()
+    AutoGripFarm.Enabled = true
+    if AutoGripFarm.Thread then pcall(task.cancel, AutoGripFarm.Thread) end
+    AutoGripFarm.Thread = task.spawn(function()
+        while AutoGripFarm.Enabled do
+            -- Try grip logic
+            local success = false
+            for i = 1, AutoGripFarm.MaxRetries do
+                -- Replace with actual grip attempt
+                success = Hub.AttemptGrip and Hub.AttemptGrip()
+                if success then break end
+                task.wait(0.5)
+            end
+            task.wait(2)
+        end
+    end)
+end
+
+local function StopAutoGripFarm()
+    AutoGripFarm.Enabled = false
+    if AutoGripFarm.Thread then pcall(task.cancel, AutoGripFarm.Thread); AutoGripFarm.Thread = nil end
+end
+
+Hub.AutoGripFarm = AutoGripFarm
+Hub.StartAutoGripFarm = StartAutoGripFarm
+Hub.StopAutoGripFarm = StopAutoGripFarm
 -- ================================================================
 local AutoGripFarm = { AltEnabled = false, MainEnabled = false, AltThread = nil, MainThread = nil, TargetPos = Vector3.new(-4458.5, 660.7, -4895.2), LocationCheckRadius = 50, PlayerDetectRadius = 20, GripWaitTime = 4 }
 

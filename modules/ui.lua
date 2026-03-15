@@ -106,6 +106,8 @@ MLeft:CreateSlider({ Name = "Speed Multiplier", Range = { 0.1, 25 }, Increment =
     if Hub.WalkspeedMultiplier.Enabled and Hub.WalkspeedMultiplier.BaseSpeed then local c = LocalPlayer.Character; if c then local h = c:FindFirstChildOfClass("Humanoid"); if h then h.WalkSpeed = Hub.WalkspeedMultiplier.BaseSpeed * v end end end
 end })
 
+MLeft:CreateSlider({ Name = "BackAttach Offset", Range = { 1, 10 }, Increment = 0.1, Suffix = " studs", CurrentValue = 3, Flag = "BackAttachOffset", Callback = function(v) Hub.BackAttach.Offset = v end })
+MLeft:CreateToggle({ Name = "Lava Protection", Description = "Disable Lava/void damage", CurrentValue = false, Flag = "LavaProtection", Callback = function(v) Hub.ToggleVoidLava(v) end })
 MLeft:CreateToggleWithKeybind({ Name = "Fly", Description = "Fly freely in any direction", CurrentValue = false, Flag = "Fly", Callback = function(v) Hub.FlySystem.Enabled = v; if v then Hub.StartFlying() else Hub.StopFlying() end end }, { CurrentKeybind = "Y", Flag = "FlyKey" })
 MLeft:CreateSlider({ Name = "Fly Speed", Range = { 10, 300 }, Increment = 5, Suffix = "", CurrentValue = 50, Flag = "FlySpeed", Callback = function(v) Hub.FlySystem.Speed = v end })
 
@@ -148,6 +150,9 @@ QRight:CreateSection("Combat Assist")
 QRight:CreateToggleWithKeybind({ Name = "Auto Perfect Block", Description = "Auto time perfect blocks", CurrentValue = false, Flag = "AutoBlock", Callback = function(v) Hub.AutoBlock.Enabled = v; if v then Hub.StartAutoBlock() else Hub.StopAutoBlock() end end }, { CurrentKeybind = "U", Flag = "AutoBlockKey" })
 
 QRight:CreateToggleWithKeybind({ Name = "Back Attach", Description = "TP behind nearest player", CurrentValue = false, Flag = "BackAttach", Callback = function(v) Hub.BackAttach.Enabled = v; if v then Hub.StartBackAttach() else Hub.StopBackAttach() end end }, { CurrentKeybind = "B", Flag = "BackAttachKey" })
+
+QRight:CreateButton({ Name = "Buy Ramen", Description = "Buy ramen from shop", Callback = function() Hub.BuyRamen() end })
+QRight:CreateInput({ Name = "Auto Use Skill", Description = "Skill name to auto use", Flag = "AutoSkillName", Callback = function(v) Hub.AutoUseSkill(v) end })
 
 QRight:CreateSection("Utility")
 
