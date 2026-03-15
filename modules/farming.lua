@@ -606,7 +606,22 @@ local function LoadAdvancedBossLoopState()
 end
 
 local function RunLoadedInSequence()
-    Hub.RefreshDataFunction()
+    -- Avoid remote invocation; simply press the in-game "Continue" button if it exists.
+    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+    local continueBtn = playerGui and playerGui:FindFirstChild("ClientGui")
+        and playerGui.ClientGui:FindFirstChild("MenuScreen")
+        and playerGui.ClientGui.MenuScreen:FindFirstChild("Menu")
+        and playerGui.ClientGui.MenuScreen.Menu:FindFirstChild("Continue")
+
+    if continueBtn and continueBtn:IsA("GuiButton") then
+        pcall(function()
+            continueBtn:Activate()
+        end)
+        return true
+    end
+
+    -- Fallback to previous method if the button isn't present
+    if Hub.RefreshDataFunction then Hub.RefreshDataFunction() end
     if not Hub.DataFunction then return false end
 
     pcall(function()
@@ -1145,11 +1160,23 @@ local function StartBossFarm()
                 if Hub.AutoBlock and Hub.AutoBlock.CurrentlyBlocking then task.wait(0.05); continue end
                 local br = GetBossRoot(BossFarm.Target.Parent)
                 if br then
-                    AutoUseSelectedSkills(br.Position)
+                    if AutoUseSelectedSkills then
+                        AutoUseSelectedSkills(br.Position)
+                    end
+                    Hub.RefreshDataEvent()
                     if Hub.DataEvent then
                         pcall(function() Hub.DataEvent:FireServer("Dash", "Sub", br.Position) end)
                         task.wait(0.05)
                         pcall(function() Hub.DataEvent:FireServer("CheckMeleeHit", nil, "NormalAttack", false) end)
+                    else
+                        -- Fallback: simulate a click when remote is missing
+                        pcall(function()
+                            local pos = Hub.UserInputService and Hub.UserInputService:GetMouseLocation()
+                            if pos and Hub.VirtualInput then
+                                Hub.VirtualInput:SendMouseButtonEvent(pos.X, pos.Y, 0, true, game, 0)
+                                Hub.VirtualInput:SendMouseButtonEvent(pos.X, pos.Y, 0, false, game, 0)
+                            end
+                        end)
                     end
                 end
             end
