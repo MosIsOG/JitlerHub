@@ -571,7 +571,7 @@ local function StartAdvancedBossLoop()
     SaveAdvancedBossLoopState()
 
     AdvancedBossLoopFarm.Thread = task.spawn(function()
-        RunLoadedInSequence()
+        if Hub.RunLoadedInSequence then pcall(Hub.RunLoadedInSequence) end
         task.wait(1.5)
 
         while AdvancedBossLoopFarm.Enabled do
@@ -585,9 +585,14 @@ local function StartAdvancedBossLoop()
             for _, bossName in ipairs(loopList) do
                 if not AdvancedBossLoopFarm.Enabled then break end
 
-                if AdvancedBossLoopFarm.HopOnChakraSenseUsers and GetActiveChakraCount() > 0 then
+                local chakraCount = Hub.GetActiveChakraCount and Hub.GetActiveChakraCount() or 0
+                if AdvancedBossLoopFarm.HopOnChakraSenseUsers and chakraCount > 0 then
                     Notify("Chakra Sense users present. Hopping...", 3)
-                    DoServerHop()
+                    if Hub.DoServerHop then
+                        Hub.DoServerHop()
+                    else
+                        Notify("Server hop helper missing.", 3)
+                    end
                     return
                 end
 
@@ -608,10 +613,15 @@ local function StartAdvancedBossLoop()
                 StartBossFarm()
 
                 while AdvancedBossLoopFarm.Enabled and BossFarm.Enabled and BossFarm.Target and BossFarm.Target.Parent and BossFarm.Target.Health > 0 do
-                    if AdvancedBossLoopFarm.HopOnChakraSenseUsers and GetActiveChakraCount() > 0 then
+                    local chakraCountInner = Hub.GetActiveChakraCount and Hub.GetActiveChakraCount() or 0
+                    if AdvancedBossLoopFarm.HopOnChakraSenseUsers and chakraCountInner > 0 then
                         StopBossFarm()
                         Notify("Chakra Sense users present. Hopping...", 3)
-                        DoServerHop()
+                        if Hub.DoServerHop then
+                            Hub.DoServerHop()
+                        else
+                            Notify("Server hop helper missing.", 3)
+                        end
                         return
                     end
                     task.wait(0.5)
@@ -622,7 +632,11 @@ local function StartAdvancedBossLoop()
 
             if AdvancedBossLoopFarm.Enabled and AdvancedBossLoopFarm.HopAfterLoop then
                 Notify("Boss loop complete. Hopping...", 3)
-                DoServerHop()
+                if Hub.DoServerHop then
+                    Hub.DoServerHop()
+                else
+                    Notify("Server hop helper missing.", 3)
+                end
                 return
             end
 
