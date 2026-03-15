@@ -287,7 +287,8 @@ local KNOWN_WEAPON_SET = {}; for _, w in ipairs(KNOWN_WEAPONS) do KNOWN_WEAPON_S
 
 -- Weapon-specific height adjustments
 local WEAPON_HEIGHT_BOOSTS = {
-    ["Onyx Asumai"] = -2,
+    ["Onyx Asumai"] = -3,
+    ["Fist"] = -2,
 }
 
 local function ScanHotbarForWeapon()
@@ -308,7 +309,7 @@ local function ScanHotbarForWeapon()
             end
         end
     end)
-    return found
+    return found or "Fist"
 end
 
 Hub.ScanHotbarForWeapon = ScanHotbarForWeapon
