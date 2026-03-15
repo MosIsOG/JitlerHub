@@ -262,50 +262,134 @@ Hub.BulkSellGems = BulkSellGems
 Hub.BulkSellFruits = BulkSellFruits
 
 -- ================================================================
--- FARM / PLAYER SAFETY / SKILL HELPERS
+-- PLAYER SAFETY / CONTESTED BOSS HELPERS
 -- ================================================================
 local SAFE_PLAYER_RADIUS = 300
+local SAFE_VERTICAL_TOLERANCE = 120
 local SECRET_SPOT = Vector3.new(-4458.5, 660.7, -4895.2)
 
 local function GetCharacterRoot(character)
-    return character and (character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("Head"))
+    if not character then return nil end
+    return character:FindFirstChild("HumanoidRootPart")
+        or character:FindFirstChild("UpperTorso")
+        or character:FindFirstChild("Torso")
+        or character:FindFirstChild("Head")
 end
 
-local function IsPlayerAlive(player)
-    local char = player and player.Character
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
-    return char and hum and hum.Health > 0
+local function IsCharacterAlive(character)
+    if not character or not character.Parent then
+        return false
+    end
+
+    local hum = character:FindFirstChildOfClass("Humanoid")
+    if not hum or hum.Health <= 0 then
+        return false
+    end
+
+    local root = GetCharacterRoot(character)
+    if not root then
+        return false
+    end
+
+    return true, hum, root
 end
 
-local function GetPlayersNearPosition(position, radius, ignoreLocal)
-    local found = {}
+local function IsPlayerValidForSafetyScan(player)
+    if not player or player == LocalPlayer then
+        return false
+    end
+
+    local char = player.Character
+    local alive, hum, root = IsCharacterAlive(char)
+    if not alive then
+        return false
+    end
+
+    if math.abs(root.Position.X) > 1e6 or math.abs(root.Position.Y) > 1e6 or math.abs(root.Position.Z) > 1e6 then
+        return false
+    end
+
+    return true, char, hum, root
+end
+
+local function GetBossRootSafe(model)
+    if not model or not model.Parent then
+        return nil
+    end
+
+    return model:FindFirstChild("HumanoidRootPart")
+        or model:FindFirstChild("UpperTorso")
+        or model:FindFirstChild("Torso")
+        or model:FindFirstChild("Head")
+        or model:FindFirstChildWhichIsA("BasePart")
+end
+
+local function GetPlayersNearPosition(position, radius, verticalTolerance)
+    local nearby = {}
+    radius = radius or SAFE_PLAYER_RADIUS
+    verticalTolerance = verticalTolerance or SAFE_VERTICAL_TOLERANCE
+
     for _, player in ipairs(Players:GetPlayers()) do
-        if ignoreLocal and player == LocalPlayer then continue end
-        if IsPlayerAlive(player) then
-            local root = GetCharacterRoot(player.Character)
-            if root and (root.Position - position).Magnitude <= radius then
-                table.insert(found, player)
+        local valid, _, _, root = IsPlayerValidForSafetyScan(player)
+        if valid and root then
+            local horizontal = Vector3.new(root.Position.X, 0, root.Position.Z)
+            local center = Vector3.new(position.X, 0, position.Z)
+            local horizontalDist = (horizontal - center).Magnitude
+            local verticalDist = math.abs(root.Position.Y - position.Y)
+
+            if horizontalDist <= radius and verticalDist <= verticalTolerance then
+                table.insert(nearby, {
+                    Player = player,
+                    Root = root,
+                    HorizontalDistance = horizontalDist,
+                    VerticalDistance = verticalDist,
+                    Distance = (root.Position - position).Magnitude,
+                })
             end
         end
     end
-    return found
+
+    table.sort(nearby, function(a, b)
+        return a.Distance < b.Distance
+    end)
+
+    return nearby
 end
 
 local function IsBossContested(model, radius)
-    local bossRoot = model and GetBossRoot(model)
-    if not bossRoot then return false end
-    local nearby = GetPlayersNearPosition(bossRoot.Position, radius or SAFE_PLAYER_RADIUS, true)
+    local bossRoot = GetBossRootSafe(model)
+    if not bossRoot then
+        return false, {}
+    end
+
+    local nearby = GetPlayersNearPosition(bossRoot.Position, radius or SAFE_PLAYER_RADIUS, SAFE_VERTICAL_TOLERANCE)
+    return #nearby > 0, nearby
+end
+
+local function ArePlayersNearMe(radius)
+    local char = LocalPlayer.Character
+    local alive, _, root = IsCharacterAlive(char)
+    if not alive or not root then
+        return false, {}
+    end
+
+    local nearby = GetPlayersNearPosition(root.Position, radius or SAFE_PLAYER_RADIUS, SAFE_VERTICAL_TOLERANCE)
     return #nearby > 0, nearby
 end
 
 local function IsActivelyAutoFarming()
-    if Hub.AdvancedBossLoopFarm and Hub.AdvancedBossLoopFarm.Enabled then return true end
+    if Hub.AdvancedBossLoopFarm and Hub.AdvancedBossLoopFarm.Enabled then
+        return true
+    end
+
     if Hub.BossFarm and Hub.BossFarm.Enabled and Hub.BossFarm.Target and Hub.BossFarm.Target.Parent and Hub.BossFarm.Target.Health > 0 then
         return true
     end
-    if Hub.MissionSystem and Hub.MissionSystem.AutoEnabled and (Hub.MissionSystem.ActiveMission or Hub.MissionSystem.AttackThread or Hub.MissionSystem.AnchorConn) then
+
+    if Hub.MissionSystem and Hub.MissionSystem.AutoEnabled and Hub.MissionSystem.ActiveMission then
         return true
     end
+
     return false
 end
 
@@ -314,69 +398,93 @@ Hub.IsActivelyAutoFarming = IsActivelyAutoFarming
 local PlayerFarmSafety = {
     Enabled = true,
     Hiding = false,
-    SavedPosition = nil,
-    SavedStates = {},
-    Thread = nil,
+    SavedStates = nil,
     LastNotify = 0,
+    LastDangerAt = 0,
+    ResumeDelay = 3,
+    Thread = nil,
 }
 
 local function PauseUnsafeFarms()
-    if Hub.PauseFarms then
-        return Hub.PauseFarms()
-    end
-
     local saved = {}
+
     if Hub.BossFarm and Hub.BossFarm.Enabled then
         saved.BossFarm = true
-        Hub.StopBossFarm()
+        pcall(function()
+            Hub.StopBossFarm()
+        end)
     end
+
     if Hub.MissionSystem and Hub.MissionSystem.AutoEnabled then
         saved.AutoMission = true
-        Hub.StopAutoMission()
+        pcall(function()
+            Hub.StopAutoMission()
+        end)
     end
+
     return saved
 end
 
 local function ResumeUnsafeFarms(saved)
-    if Hub.ResumeFarms then
-        Hub.ResumeFarms(saved)
-        return
+    saved = saved or {}
+
+    if saved.BossFarm and Hub.BossFarm and Hub.BossFarm.SelectedBoss and Hub.BossFarm.SelectedBoss ~= "" then
+        pcall(function()
+            Hub.BossFarm.Enabled = true
+            Hub.StartBossFarm()
+        end)
     end
 
-    if saved.BossFarm and Hub.BossFarm then
-        Hub.BossFarm.Enabled = true
-        Hub.StartBossFarm()
-    end
     if saved.AutoMission and Hub.MissionSystem then
-        Hub.StartAutoMission()
+        pcall(function()
+            Hub.StartAutoMission()
+        end)
     end
 end
 
-local function HandleNearbyPlayerDanger()
-    local char = LocalPlayer.Character
-    local root = char and GetCharacterRoot(char)
-    if not root then return end
+Hub.PauseFarms = PauseUnsafeFarms
+Hub.ResumeFarms = ResumeUnsafeFarms
 
-    local nearby = GetPlayersNearPosition(root.Position, SAFE_PLAYER_RADIUS, true)
-    if #nearby > 0 then
+local function HandleNearbyPlayerDanger()
+    if not PlayerFarmSafety.Enabled then
+        return
+    end
+
+    if not (Hub.IsActivelyAutoFarming and Hub.IsActivelyAutoFarming()) then
+        if PlayerFarmSafety.Hiding and tick() - PlayerFarmSafety.LastDangerAt >= PlayerFarmSafety.ResumeDelay then
+            PlayerFarmSafety.Hiding = false
+            ResumeUnsafeFarms(PlayerFarmSafety.SavedStates)
+            PlayerFarmSafety.SavedStates = nil
+        end
+        return
+    end
+
+    local danger, nearby = ArePlayersNearMe(SAFE_PLAYER_RADIUS)
+
+    if danger then
+        PlayerFarmSafety.LastDangerAt = tick()
+
         if not PlayerFarmSafety.Hiding then
             PlayerFarmSafety.Hiding = true
-            PlayerFarmSafety.SavedPosition = root.Position
             PlayerFarmSafety.SavedStates = PauseUnsafeFarms()
-            TeleportTo(SECRET_SPOT)
+
+            pcall(function()
+                TeleportTo(SECRET_SPOT)
+            end)
+
             if tick() - PlayerFarmSafety.LastNotify > 2 then
                 PlayerFarmSafety.LastNotify = tick()
                 Notify("Players are nearby...", 3)
             end
         end
-    elseif PlayerFarmSafety.Hiding then
+
+        return
+    end
+
+    if PlayerFarmSafety.Hiding and tick() - PlayerFarmSafety.LastDangerAt >= PlayerFarmSafety.ResumeDelay then
         PlayerFarmSafety.Hiding = false
-        if PlayerFarmSafety.SavedPosition then
-            TeleportTo(PlayerFarmSafety.SavedPosition)
-            PlayerFarmSafety.SavedPosition = nil
-        end
-        ResumeUnsafeFarms(PlayerFarmSafety.SavedStates or {})
-        PlayerFarmSafety.SavedStates = {}
+        ResumeUnsafeFarms(PlayerFarmSafety.SavedStates)
+        PlayerFarmSafety.SavedStates = nil
     end
 end
 
