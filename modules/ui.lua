@@ -85,6 +85,37 @@ ESPRight:CreateSlider({ Name = "Boss Max Distance", Range = { 100, 5000 }, Incre
 ESPRight:CreateSlider({ Name = "Boss Panel Distance", Range = { 50, 1000 }, Increment = 25, Suffix = " studs", CurrentValue = 500, Flag = "BossTransDist", Callback = function(v) Hub.BossESP.TransitionDist = v end })
 ESPRight:CreateSlider({ Name = "Boss Text Size", Range = { 8, 24 }, Increment = 1, Suffix = "px", CurrentValue = 14, Flag = "BossTextSize", Callback = function(v) Hub.BossESP.TextSize = v end })
 
+ESPRight:CreateSection("Corrupted Point ESP")
+
+ESPRight:CreateToggle({
+    Name = "Enable CorruptedPoint ESP",
+    Description = "Show CorruptedPoint current health",
+    CurrentValue = false,
+    Flag = "CorruptedPointESP",
+    Callback = function(v)
+        Hub.CorruptedPointESP.Enabled = v
+        if v then Hub.StartCorruptedPointESP() else Hub.StopCorruptedPointESP() end
+    end
+})
+ESPRight:CreateSlider({
+    Name = "CP ESP Text Size",
+    Range = { 8, 24 },
+    Increment = 1,
+    Suffix = "px",
+    CurrentValue = 15,
+    Flag = "CorruptedPointESPTextSize",
+    Callback = function(v) Hub.CorruptedPointESP.TextSize = v end
+})
+ESPRight:CreateSlider({
+    Name = "CP ESP Max Distance",
+    Range = { 100, 5000 },
+    Increment = 50,
+    Suffix = " studs",
+    CurrentValue = 3000,
+    Flag = "CorruptedPointESPDist",
+    Callback = function(v) Hub.CorruptedPointESP.MaxDistance = v end
+})
+
 ESPLeft:CreateSection("NPC ESP")
 
 ESPLeft:CreateToggle({ Name = "Enable NPC ESP", Description = "Show dialog NPCs (lime green)", CurrentValue = false, Flag = "NPCESP", Callback = function(v) Hub.NPCESP.Enabled = v; if v then Hub.StartNPCESP() else Hub.StopNPCESP() end end })
@@ -213,10 +244,102 @@ local AFLeft, AFRight = AutoFarmTab:CreateDualPane()
 AFLeft:CreateSection("Boss Farm")
 
 AFLeft:CreateInput({ Name = "Weapon Name", PlaceholderText = "Onyx Resanagi", Callback = function(v) Hub.BossFarm.WeaponName = v end })
-AFLeft:CreateDropdown({ Name = "Select Boss", Options = { "Wooden Golem", "Hyuga Boss", "Lava Snake", "Haku Boss", "Barbarit The Rose", "Manda", "Tairock" }, CurrentOption = "Wooden Golem", Flag = "BossSelect", Callback = function(v) Hub.BossFarm.SelectedBoss = type(v) == "table" and v[1] or v end })
+AFLeft:CreateDropdown({ Name = "Select Boss", Options = { "Wooden Golem", "Hyuga Boss", "Lava Snake", "Haku Boss", "Barbarit The Rose", "Manda", "Tairock", "The Barbarian", "The Ringed Samurai" }, CurrentOption = "Wooden Golem", Flag = "BossSelect", Callback = function(v) Hub.BossFarm.SelectedBoss = type(v) == "table" and v[1] or v end })
 AFLeft:CreateToggleWithKeybind({ Name = "Start Farm", Description = "Auto-attack selected boss", CurrentValue = false, Flag = "BossFarm", Callback = function(v) Hub.BossFarm.Enabled = v; if v then Hub.StartBossFarm() else Hub.StopBossFarm() end end }, { CurrentKeybind = "G", Flag = "BossFarmKey" })
 AFLeft:CreateSlider({ Name = "Attack Delay", Range = { 0.02, 0.5 }, Increment = 0.01, Suffix = "s", CurrentValue = 0.12, Flag = "BFAttackDelay", Callback = function(v) Hub.BossFarm.AttackDelay = v end })
 AFLeft:CreateToggle({ Name = "Auto Loot On Kill", CurrentValue = false, Flag = "BossAutoLoot", Callback = function(v) Hub.BossFarm.AutoLootOnKill = v end })
+
+AFLeft:CreateSection("Advanced Boss Loop")
+
+AFLeft:CreateDropdown({
+    Name = "Loop Bosses",
+    Options = {
+        "Wooden Golem",
+        "Hyuga Boss",
+        "Lava Snake",
+        "Haku Boss",
+        "Barbarit The Rose",
+        "Manda",
+        "Tairock",
+        "The Barbarian",
+        "The Ringed Samurai"
+    },
+    CurrentOption = {},
+    MultiSelection = true,
+    Flag = "AdvancedBossLoopSelect",
+    Callback = function(v)
+        for name in pairs(Hub.AdvancedBossLoopFarm.SelectedBosses) do
+            Hub.AdvancedBossLoopFarm.SelectedBosses[name] = false
+        end
+
+        local selected = type(v) == "table" and v or { v }
+        for _, name in ipairs(selected) do
+            if Hub.AdvancedBossLoopFarm.SelectedBosses[name] ~= nil then
+                Hub.AdvancedBossLoopFarm.SelectedBosses[name] = true
+            end
+        end
+    end
+})
+
+AFLeft:CreateToggle({
+    Name = "Advanced Auto Farm",
+    Description = "Loop selected bosses and keep going across hops",
+    CurrentValue = Hub.AdvancedBossLoopFarm.Enabled,
+    Flag = "AdvancedBossLoopEnabled",
+    Callback = function(v)
+        Hub.AdvancedBossLoopFarm.Enabled = v
+        if v then
+            Hub.StartAdvancedBossLoop()
+        else
+            Hub.StopAdvancedBossLoop()
+        end
+    end
+})
+
+AFLeft:CreateToggle({
+    Name = "Hop After Loop",
+    CurrentValue = false,
+    Flag = "AdvancedBossHopAfterLoop",
+    Callback = function(v)
+        Hub.AdvancedBossLoopFarm.HopAfterLoop = v
+    end
+})
+
+AFLeft:CreateToggle({
+    Name = "Hop on Chakra Sense Users",
+    CurrentValue = false,
+    Flag = "AdvancedBossHopOnChakra",
+    Callback = function(v)
+        Hub.AdvancedBossLoopFarm.HopOnChakraSenseUsers = v
+    end
+})
+
+AFLeft:CreateSection("Auto Use Skill")
+
+AFLeft:CreateToggle({
+    Name = "Enable Auto Skills",
+    Description = "Use selected skills during mission/boss farm",
+    CurrentValue = false,
+    Flag = "AutoUseSkills",
+    Callback = function(v)
+        Hub.AutoSkillFarm.Enabled = v
+    end
+})
+
+AFLeft:CreateDropdown({
+    Name = "Select Skills",
+    Options = { "Asumai Dance", "Asumai One Two", "Spinning Dash" },
+    CurrentOption = { "Asumai Dance", "Asumai One Two", "Spinning Dash" },
+    MultiSelection = true,
+    Flag = "AutoSkillSelect",
+    Callback = function(v)
+        Hub.AutoSkillFarm.SelectedSkills = {}
+        local selected = type(v) == "table" and v or { v }
+        for _, skill in ipairs(selected) do
+            Hub.AutoSkillFarm.SelectedSkills[skill] = true
+        end
+    end
+})
 
 AFLeft:CreateSection("Auto Mode Farm")
 
@@ -318,6 +441,7 @@ AFRight:CreateSlider({ Name = "Wait per Rift", Range = { 0.5, 5 }, Increment = 0
 AFRight:CreateSection("Buy Items")
 
 AFRight:CreateDropdown({ Name = "Select Item", Options = Hub.BuyItemNames, CurrentOption = Hub.BuyItemNames[1], Flag = "BuyItemSelect", Callback = function(v) Hub.SelectedBuyItem = type(v) == "table" and v[1] or v end })
+AFRight:CreateDropdown({ Name = "Ramen Amount", Options = { "1", "5" }, CurrentOption = "1", Flag = "RamenAmount", Callback = function(v) local selected = type(v) == "table" and v[1] or v; Hub.RamenBuyAmount = tonumber(selected) or 1 end })
 AFRight:CreateButton({ Name = "Buy Selected Item", Callback = function() task.spawn(Hub.BuySelectedItem) end })
 
 AFRight:CreateSection("Bulk Sell")

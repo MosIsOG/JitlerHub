@@ -262,6 +262,148 @@ Hub.BulkSellGems = BulkSellGems
 Hub.BulkSellFruits = BulkSellFruits
 
 -- ================================================================
+-- FARM / PLAYER SAFETY / SKILL HELPERS
+-- ================================================================
+local SAFE_PLAYER_RADIUS = 300
+local SECRET_SPOT = Vector3.new(-4458.5, 660.7, -4895.2)
+
+local function GetCharacterRoot(character)
+    return character and (character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("Head"))
+end
+
+local function IsPlayerAlive(player)
+    local char = player and player.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    return char and hum and hum.Health > 0
+end
+
+local function GetPlayersNearPosition(position, radius, ignoreLocal)
+    local found = {}
+    for _, player in ipairs(Players:GetPlayers()) do
+        if ignoreLocal and player == LocalPlayer then continue end
+        if IsPlayerAlive(player) then
+            local root = GetCharacterRoot(player.Character)
+            if root and (root.Position - position).Magnitude <= radius then
+                table.insert(found, player)
+            end
+        end
+    end
+    return found
+end
+
+local function IsBossContested(model, radius)
+    local bossRoot = model and GetBossRoot(model)
+    if not bossRoot then return false end
+    local nearby = GetPlayersNearPosition(bossRoot.Position, radius or SAFE_PLAYER_RADIUS, true)
+    return #nearby > 0, nearby
+end
+
+local function IsActivelyAutoFarming()
+    if Hub.AdvancedBossLoopFarm and Hub.AdvancedBossLoopFarm.Enabled then return true end
+    if Hub.BossFarm and Hub.BossFarm.Enabled and Hub.BossFarm.Target and Hub.BossFarm.Target.Parent and Hub.BossFarm.Target.Health > 0 then
+        return true
+    end
+    if Hub.MissionSystem and Hub.MissionSystem.AutoEnabled and (Hub.MissionSystem.ActiveMission or Hub.MissionSystem.AttackThread or Hub.MissionSystem.AnchorConn) then
+        return true
+    end
+    return false
+end
+
+Hub.IsActivelyAutoFarming = IsActivelyAutoFarming
+
+local PlayerFarmSafety = {
+    Enabled = true,
+    Hiding = false,
+    SavedPosition = nil,
+    SavedStates = {},
+    Thread = nil,
+    LastNotify = 0,
+}
+
+local function PauseUnsafeFarms()
+    if Hub.PauseFarms then
+        return Hub.PauseFarms()
+    end
+
+    local saved = {}
+    if Hub.BossFarm and Hub.BossFarm.Enabled then
+        saved.BossFarm = true
+        Hub.StopBossFarm()
+    end
+    if Hub.MissionSystem and Hub.MissionSystem.AutoEnabled then
+        saved.AutoMission = true
+        Hub.StopAutoMission()
+    end
+    return saved
+end
+
+local function ResumeUnsafeFarms(saved)
+    if Hub.ResumeFarms then
+        Hub.ResumeFarms(saved)
+        return
+    end
+
+    if saved.BossFarm and Hub.BossFarm then
+        Hub.BossFarm.Enabled = true
+        Hub.StartBossFarm()
+    end
+    if saved.AutoMission and Hub.MissionSystem then
+        Hub.StartAutoMission()
+    end
+end
+
+local function HandleNearbyPlayerDanger()
+    local char = LocalPlayer.Character
+    local root = char and GetCharacterRoot(char)
+    if not root then return end
+
+    local nearby = GetPlayersNearPosition(root.Position, SAFE_PLAYER_RADIUS, true)
+    if #nearby > 0 then
+        if not PlayerFarmSafety.Hiding then
+            PlayerFarmSafety.Hiding = true
+            PlayerFarmSafety.SavedPosition = root.Position
+            PlayerFarmSafety.SavedStates = PauseUnsafeFarms()
+            TeleportTo(SECRET_SPOT)
+            if tick() - PlayerFarmSafety.LastNotify > 2 then
+                PlayerFarmSafety.LastNotify = tick()
+                Notify("Players are nearby...", 3)
+            end
+        end
+    elseif PlayerFarmSafety.Hiding then
+        PlayerFarmSafety.Hiding = false
+        if PlayerFarmSafety.SavedPosition then
+            TeleportTo(PlayerFarmSafety.SavedPosition)
+            PlayerFarmSafety.SavedPosition = nil
+        end
+        ResumeUnsafeFarms(PlayerFarmSafety.SavedStates or {})
+        PlayerFarmSafety.SavedStates = {}
+    end
+end
+
+local function StartPlayerFarmSafety()
+    if PlayerFarmSafety.Thread then pcall(task.cancel, PlayerFarmSafety.Thread) end
+    PlayerFarmSafety.Thread = task.spawn(function()
+        while true do
+            if IsActivelyAutoFarming() then
+                HandleNearbyPlayerDanger()
+            elseif PlayerFarmSafety.Hiding then
+                PlayerFarmSafety.Hiding = false
+                if PlayerFarmSafety.SavedPosition then
+                    TeleportTo(PlayerFarmSafety.SavedPosition)
+                    PlayerFarmSafety.SavedPosition = nil
+                end
+                ResumeUnsafeFarms(PlayerFarmSafety.SavedStates or {})
+                PlayerFarmSafety.SavedStates = {}
+            end
+            task.wait(0.5)
+        end
+    end)
+end
+
+Hub.PlayerFarmSafety = PlayerFarmSafety
+Hub.StartPlayerFarmSafety = StartPlayerFarmSafety
+
+-- ================================================================
 -- BOSS FARM
 local function PlayerSafetyCheck()
     local char = LocalPlayer.Character; if not char then return false end
@@ -310,12 +452,197 @@ local WEAPON_HEIGHT_BOOSTS = {
     ["Onyx Asumai"] = -3,
     ["Fist"] = -2,
 }
-local function AdvancedBossLoop()
-     -- Advanced boss loop logic stub
-     Notify("Advanced boss loop started!", 2)
-     -- Add actual loop logic here
+local AdvancedBossLoopFarm = {
+    Enabled = false,
+    Thread = nil,
+    SelectedBosses = {
+        ["Wooden Golem"] = false,
+        ["Hyuga Boss"] = false,
+        ["Lava Snake"] = false,
+        ["Haku Boss"] = false,
+        ["Barbarit The Rose"] = false,
+        ["Manda"] = false,
+        ["Tairock"] = false,
+        ["The Barbarian"] = false,
+        ["The Ringed Samurai"] = false,
+    },
+    HopAfterLoop = false,
+    HopOnChakraSenseUsers = false,
+    PersistPath = "JitlerHub/AdvancedBossLoop.json",
+    ResumePending = false,
+}
+
+Hub.AdvancedBossLoopFarm = AdvancedBossLoopFarm
+
+local function SaveAdvancedBossLoopState()
+    if not writefile or not isfolder or not makefolder then return end
+    pcall(function()
+        if not isfolder("JitlerHub") then makefolder("JitlerHub") end
+        writefile(AdvancedBossLoopFarm.PersistPath, Hub.HttpService:JSONEncode({
+            Enabled = AdvancedBossLoopFarm.Enabled,
+        }))
+    end)
 end
-Hub.AdvancedBossLoop = AdvancedBossLoop
+
+local function LoadAdvancedBossLoopState()
+    if not readfile or not isfile then return end
+    pcall(function()
+        if isfile(AdvancedBossLoopFarm.PersistPath) then
+            local raw = readfile(AdvancedBossLoopFarm.PersistPath)
+            local decoded = Hub.HttpService:JSONDecode(raw)
+            if type(decoded) == "table" then
+                AdvancedBossLoopFarm.Enabled = decoded.Enabled == true
+            end
+        end
+    end)
+end
+
+local function RunLoadedInSequence()
+    Hub.RefreshDataFunction()
+    if not Hub.DataFunction then return false end
+
+    pcall(function()
+        local args = { [1] = "AmIModerator" }
+        Hub.DataFunction:InvokeServer(unpack(args))
+    end)
+
+    task.wait(1)
+
+    pcall(function()
+        local args = { [1] = "LoadedIn" }
+        Hub.DataFunction:InvokeServer(unpack(args))
+    end)
+
+    return true
+end
+
+Hub.RunLoadedInSequence = RunLoadedInSequence
+
+local function GetSelectedBossLoopList()
+    local list = {}
+    for bossName, enabled in pairs(AdvancedBossLoopFarm.SelectedBosses) do
+        if enabled then
+            table.insert(list, bossName)
+        end
+    end
+    table.sort(list, function(a, b) return a < b end)
+    return list
+end
+
+local function TriggerBossSpawnIfNeeded(bossName)
+    if bossName == "Lava Snake" then
+        TeleportTo(Vector3.new(-547.6, -541.7, -1281.8))
+        task.wait(2)
+        return
+    end
+
+    if bossName == "The Ringed Samurai" then
+        TeleportTo(Vector3.new(1418.9, -474.4, -595.8))
+        task.wait(2)
+        return
+    end
+end
+
+local function WaitForBossSpawnOrSkip(bossName, timeout)
+    timeout = timeout or 16
+    TriggerBossSpawnIfNeeded(bossName)
+
+    local start = tick()
+    repeat
+        local hum, model = FindBoss(bossName)
+        if hum and model then
+            return hum, model
+        end
+        task.wait(1)
+    until tick() - start >= timeout
+
+    return nil, nil
+end
+
+local function StopAdvancedBossLoop()
+    AdvancedBossLoopFarm.Enabled = false
+    SaveAdvancedBossLoopState()
+    if AdvancedBossLoopFarm.Thread then pcall(task.cancel, AdvancedBossLoopFarm.Thread); AdvancedBossLoopFarm.Thread = nil end
+end
+
+local function StartAdvancedBossLoop()
+    if AdvancedBossLoopFarm.Thread then pcall(task.cancel, AdvancedBossLoopFarm.Thread) end
+    AdvancedBossLoopFarm.Enabled = true
+    SaveAdvancedBossLoopState()
+
+    AdvancedBossLoopFarm.Thread = task.spawn(function()
+        RunLoadedInSequence()
+        task.wait(1.5)
+
+        while AdvancedBossLoopFarm.Enabled do
+            local loopList = GetSelectedBossLoopList()
+            if #loopList == 0 then
+                Notify("No bosses selected for Advanced Auto Farm.", 3)
+                StopAdvancedBossLoop()
+                break
+            end
+
+            for _, bossName in ipairs(loopList) do
+                if not AdvancedBossLoopFarm.Enabled then break end
+
+                if AdvancedBossLoopFarm.HopOnChakraSenseUsers and GetActiveChakraCount() > 0 then
+                    Notify("Chakra Sense users present. Hopping...", 3)
+                    DoServerHop()
+                    return
+                end
+
+                local hum, model = WaitForBossSpawnOrSkip(bossName, 16)
+                if not hum or not model then
+                    Notify(bossName .. " unavailable, skipping...", 2)
+                    continue
+                end
+
+                local contested = IsBossContested(model, 300)
+                if contested then
+                    Notify("Players are nearby...", 3)
+                    continue
+                end
+
+                BossFarm.SelectedBoss = bossName
+                BossFarm.Enabled = true
+                StartBossFarm()
+
+                while AdvancedBossLoopFarm.Enabled and BossFarm.Enabled and BossFarm.Target and BossFarm.Target.Parent and BossFarm.Target.Health > 0 do
+                    if AdvancedBossLoopFarm.HopOnChakraSenseUsers and GetActiveChakraCount() > 0 then
+                        StopBossFarm()
+                        Notify("Chakra Sense users present. Hopping...", 3)
+                        DoServerHop()
+                        return
+                    end
+                    task.wait(0.5)
+                end
+
+                task.wait(1)
+            end
+
+            if AdvancedBossLoopFarm.Enabled and AdvancedBossLoopFarm.HopAfterLoop then
+                Notify("Boss loop complete. Hopping...", 3)
+                DoServerHop()
+                return
+            end
+
+            task.wait(2)
+        end
+    end)
+end
+
+Hub.StartAdvancedBossLoop = StartAdvancedBossLoop
+Hub.StopAdvancedBossLoop = StopAdvancedBossLoop
+Hub.AdvancedBossLoop = StartAdvancedBossLoop
+
+LoadAdvancedBossLoopState()
+
+task.spawn(function()
+    task.wait(6)
+    if AdvancedBossLoopFarm.Enabled then
+        StartAdvancedBossLoop()
+    end
+end)
 
 local function ScanHotbarForWeapon()
     local found = nil
@@ -348,14 +675,25 @@ local BossFarm = {
     HyugaHeightBoost = 0, HyugaAnimConnection = nil, HyugaInVoid = false, HyugaVoidConn = nil,
     LavaSnakeHeightBoost = 0, LavaSnakeAnimConnection = nil,
     MandaHeightBoost = 0, MandaAnimConnection = nil,
+    RingedSamuraiHeightBoost = 0, RingedSamuraiAnimConnection = nil,
     HakuAnimConnection = nil, HakuSafeSpot = false, HakuSafeSpotEndTime = 0, AutoLootOnKill = false,
     KnockedThread = nil,
 }
 
 local BossConfigs = {
-    ["Wooden Golem"] = { height = 16 }, ["Hyuga Boss"] = { height = 10.75 }, ["Lava Snake"] = { height = 38 },
-    ["Haku Boss"] = { height = 10.75 }, ["Barbarit The Rose"] = { height = 14 }, ["Manda"] = { height = 38 },
-    ["Tairock"] = { height = 10.75 }, ["The Barbarian"] = { height = 14 },
+    ["Wooden Golem"] = { height = 16 },
+    ["Hyuga Boss"] = { height = 10.75 },
+    ["Lava Snake"] = { height = 38, triggerSpawn = true },
+    ["Haku Boss"] = { height = 10.75 },
+    ["Barbarit The Rose"] = { height = 14 },
+    ["Manda"] = { height = 38, triggerSpawn = true },
+    ["Tairock"] = { height = 10.75, triggerSpawn = true },
+    ["The Barbarian"] = { height = 14 },
+    ["The Ringed Samurai"] = {
+        height = 14,
+        triggerSpawn = true,
+        triggerPos = Vector3.new(1418.9, -474.4, -595.8),
+    },
 }
 local BossLootSpots = {
     ["Hyuga Boss"] = Vector3.new(-663.8, -359.9, -728.9), ["Wooden Golem"] = Vector3.new(-4716.2, 344.1, -2932.0),
@@ -425,11 +763,89 @@ local function MonitorMandaAnimations(bossModel)
     BossFarm.MandaAnimConnection = animator.AnimationPlayed:Connect(function(track) if not BossFarm.Enabled then return end; local assetId = track.Animation.AnimationId:match("rbxassetid://(%d+)") or track.Animation.AnimationId; if assetId == "9954909571" then BossFarm.MandaHeightBoost = 15; task.spawn(function() while track and track.IsPlaying and BossFarm.Enabled do task.wait(0.1) end; task.wait(0.5); BossFarm.MandaHeightBoost = 0 end) end end)
 end
 
+local function MonitorRingedSamuraiAnimations(model)
+    if BossFarm.RingedSamuraiAnimConnection then
+        BossFarm.RingedSamuraiAnimConnection:Disconnect()
+        BossFarm.RingedSamuraiAnimConnection = nil
+    end
+
+    local hum = model and model:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+
+    local animator = hum:FindFirstChildOfClass("Animator")
+    if not animator then return end
+
+    BossFarm.RingedSamuraiAnimConnection = animator.AnimationPlayed:Connect(function(track)
+        if not BossFarm.Enabled then return end
+        local anim = track and track.Animation
+        local assetId = anim and (anim.AnimationId:match("rbxassetid://(%d+)") or anim.AnimationId)
+        if assetId == "137738911755203" then
+            BossFarm.RingedSamuraiHeightBoost = -100
+            task.spawn(function()
+                while track and track.IsPlaying and BossFarm.Enabled do
+                    task.wait(0.1)
+                end
+                task.wait(0.35)
+                BossFarm.RingedSamuraiHeightBoost = 0
+            end)
+        end
+    end)
+end
+
 local function MonitorHakuBossIceDragon()
     if BossFarm.HakuAnimConnection then BossFarm.HakuAnimConnection:Disconnect(); BossFarm.HakuAnimConnection = nil end
     local debris = workspace:FindFirstChild("Debris"); if not debris then local conn; conn = workspace.ChildAdded:Connect(function(c) if c.Name == "Debris" then conn:Disconnect(); MonitorHakuBossIceDragon() end end); return end
     BossFarm.HakuAnimConnection = debris.ChildAdded:Connect(function(child) if not BossFarm.Enabled then return end; local dur = child.Name == "IceDragonHead" and 4 or (child:IsA("Beam") and child.Name == "Beam121") and 1 or nil; if dur then local char = LocalPlayer.Character; if char and char:FindFirstChild("HumanoidRootPart") then char.HumanoidRootPart.CFrame = CFrame.new(-2969.2, 1832.9, -9610.4); BossFarm.HakuSafeSpot = true; BossFarm.HakuSafeSpotEndTime = tick() + dur end end end)
 end
+
+local function WaitForBeingGripped(model, timeout)
+    timeout = timeout or 6
+    local start = tick()
+
+    while tick() - start <= timeout do
+        local bg = model and model.Parent and model:FindFirstChild("BeingGripped", true)
+        local gripped = false
+        pcall(function()
+            if bg and (bg.Value == true or bg.Value == "ON" or bg.Value == 1) then
+                gripped = true
+            end
+        end)
+        if gripped then
+            return true
+        end
+        task.wait(0.15)
+    end
+
+    return false
+end
+
+local function RetryGripUntilBeingGripped(model, maxAttempts)
+    maxAttempts = maxAttempts or 12
+    local bossRoot = GetBossRoot(model)
+    if not bossRoot then return false end
+
+    for _ = 1, maxAttempts do
+        local char = LocalPlayer.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        if root then
+            root.CFrame = CFrame.new(bossRoot.Position)
+        end
+
+        task.wait(0.08)
+
+        if Hub.DataEvent then
+            pcall(function() Hub.DataEvent:FireServer("Grip") end)
+        end
+
+        if WaitForBeingGripped(model, 0.6) then
+            return true
+        end
+    end
+
+    return false
+end
+
+Hub.RetryGripUntilBeingGripped = RetryGripUntilBeingGripped
 
 local function MonitorBossKnocked(model)
     if BossFarm.KnockedThread then pcall(task.cancel, BossFarm.KnockedThread); BossFarm.KnockedThread = nil end
@@ -446,19 +862,17 @@ local function MonitorBossKnocked(model)
             end)
             if isKnocked then
                 Notify("Mob knocked! Gripping...", 2)
-                -- Stop anchor and attack so we can move to the mob
                 if BossFarm.AnchorConn then BossFarm.AnchorConn:Disconnect(); BossFarm.AnchorConn = nil end
                 if BossFarm.Thread then pcall(task.cancel, BossFarm.Thread); BossFarm.Thread = nil end
                 StopCharging()
-                -- Teleport to mob and grip
-                local bossRoot = GetBossRoot(model)
-                if bossRoot then
-                    local char = LocalPlayer.Character
-                    local root = char and char:FindFirstChild("HumanoidRootPart")
-                    if root then root.CFrame = CFrame.new(bossRoot.Position) end
-                    task.wait(0.1)
-                    if Hub.DataEvent then pcall(function() Hub.DataEvent:FireServer("Grip") end) end
+
+                local success = RetryGripUntilBeingGripped(model, 12)
+                if success then
+                    Notify("Grip confirmed!", 2)
+                else
+                    Notify("Grip retry timed out.", 2)
                 end
+
                 task.wait(0.5)
                 StopBossFarm()
                 return
@@ -469,66 +883,153 @@ local function MonitorBossKnocked(model)
 end
 
 local function StartBossFarm()
-    if BossFarm.AnchorConn then BossFarm.AnchorConn:Disconnect() end; if BossFarm.Thread then pcall(task.cancel, BossFarm.Thread) end
+    if BossFarm.AnchorConn then BossFarm.AnchorConn:Disconnect() end
+    if BossFarm.Thread then pcall(task.cancel, BossFarm.Thread) end
+
     local config = BossConfigs[BossFarm.SelectedBoss]
-    -- Lava Snake: teleport to area first so trigger-spawn activates
-    if BossFarm.SelectedBoss == "Lava Snake" then
-        TeleportTo(Vector3.new(-547.6, -541.7, -1281.8)); task.wait(2)
+    if not config then
+        Notify("Unknown boss config: " .. tostring(BossFarm.SelectedBoss), 3)
+        BossFarm.Enabled = false
+        return
     end
+
+    if config.triggerSpawn and config.triggerPos then
+        TeleportTo(config.triggerPos)
+        task.wait(2)
+    elseif BossFarm.SelectedBoss == "Lava Snake" then
+        TeleportTo(Vector3.new(-547.6, -541.7, -1281.8))
+        task.wait(2)
+    end
+
     local hum, model
-    -- For bosses that trigger-spawn, retry until they appear
-    if BossFarm.SelectedBoss == "Lava Snake" or BossFarm.SelectedBoss == "Tairock" or BossFarm.SelectedBoss == "Manda" then
+    if config.triggerSpawn then
         for attempt = 1, 10 do
             hum, model = FindBoss(BossFarm.SelectedBoss)
             if hum and model then break end
             Notify("Waiting for " .. BossFarm.SelectedBoss .. " to spawn... (" .. attempt .. "/10)", 2)
+            if config.triggerPos then
+                TeleportTo(config.triggerPos)
+            end
             task.wait(2)
         end
     else
         hum, model = FindBoss(BossFarm.SelectedBoss)
     end
-    if not hum or not model then Notify(BossFarm.SelectedBoss .. " not spawned!", 3); BossFarm.Enabled = false; return end
-    BossFarm.Target = hum; BossFarm.TargetName = model.Name; if config then BossFarm.HeightOffset = config.height end
-    if BossFarm.TargetName == "Hyuga Boss" then MonitorHyugaBossAnimations(model); MonitorHyugaVoid(model); task.spawn(function() BossFarm.HyugaHeightBoost = -2; task.wait(5); if BossFarm.HyugaHeightBoost == -2 then BossFarm.HyugaHeightBoost = 0 end end) end
+
+    if not hum or not model then
+        Notify(BossFarm.SelectedBoss .. " not spawned!", 3)
+        BossFarm.Enabled = false
+        return
+    end
+
+    local contested = IsBossContested(model, 300)
+    if contested then
+        Notify("Players are nearby...", 3)
+        BossFarm.Enabled = false
+        return
+    end
+
+    BossFarm.Target = hum
+    BossFarm.TargetName = model.Name
+    BossFarm.HeightOffset = config.height or BossFarm.HeightOffset
+
+    if BossFarm.TargetName == "Hyuga Boss" then
+        MonitorHyugaBossAnimations(model)
+        MonitorHyugaVoid(model)
+        task.spawn(function()
+            BossFarm.HyugaHeightBoost = -2
+            task.wait(5)
+            if BossFarm.HyugaHeightBoost == -2 then BossFarm.HyugaHeightBoost = 0 end
+        end)
+    end
     if BossFarm.TargetName == "Lava Snake" then MonitorLavaSnakeAnimations(model) end
     if BossFarm.TargetName == "Manda" then MonitorMandaAnimations(model) end
     if BossFarm.TargetName == "Haku Boss" then MonitorHakuBossIceDragon() end
+    if BossFarm.TargetName == "The Ringed Samurai" then MonitorRingedSamuraiAnimations(model) end
+
     MonitorBossKnocked(model)
-    -- Auto-detect weapon from hotbar if not manually set
+
     local detectedWeapon = ScanHotbarForWeapon()
     if detectedWeapon then
         BossFarm.WeaponName = detectedWeapon
         Notify("Auto-detected weapon: " .. detectedWeapon, 2)
     end
+
     BossFarm.WeaponHeightBoost = WEAPON_HEIGHT_BOOSTS[BossFarm.WeaponName] or 0
-    if Hub.DataEvent and BossFarm.WeaponName ~= "" then pcall(function() Hub.DataEvent:FireServer("Item", "Selected", BossFarm.WeaponName) end) end
-    task.wait(0.5); StartCharging(); Notify("Farming: " .. BossFarm.TargetName, 3)
+    if Hub.DataEvent and BossFarm.WeaponName ~= "" then
+        pcall(function() Hub.DataEvent:FireServer("Item", "Selected", BossFarm.WeaponName) end)
+    end
+
+    task.wait(0.5)
+    StartCharging()
+    Notify("Farming: " .. BossFarm.TargetName, 3)
 
     BossFarm.AnchorConn = RunService.Heartbeat:Connect(function()
         pcall(function()
-            if not BossFarm.Enabled then return end; local h = BossFarm.Target
+            if not BossFarm.Enabled then return end
+            local h = BossFarm.Target
             if not h or not h.Parent or h.Health <= 0 then
-                local deadName = BossFarm.TargetName; BossFarm.Enabled = false
+                local deadName = BossFarm.TargetName
+                BossFarm.Enabled = false
                 StopCharging()
                 if BossFarm.AnchorConn then BossFarm.AnchorConn:Disconnect(); BossFarm.AnchorConn = nil end
                 if BossFarm.Thread then pcall(task.cancel, BossFarm.Thread); BossFarm.Thread = nil end
-                if BossFarm.AutoLootOnKill then task.spawn(function() pcall(CollectBossLoot, deadName) end) end; return
+                if BossFarm.AutoLootOnKill then
+                    task.spawn(function() pcall(CollectBossLoot, deadName) end)
+                end
+                return
             end
-            local bossRoot = GetBossRoot(h.Parent); if not bossRoot then return end
-            local char = LocalPlayer.Character; if not char then return end; local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
-            if BossFarm.HakuSafeSpot and tick() >= BossFarm.HakuSafeSpotEndTime then BossFarm.HakuSafeSpot = false end
-            if BossFarm.HyugaInVoid then root.CFrame = CFrame.new(HYUGA_VOID_SAFE_SPOT)
-            elseif BossFarm.HakuSafeSpot then root.CFrame = CFrame.new(-2969.2, 1832.9, -9610.4)
-            else root.CFrame = CFrame.lookAt(bossRoot.Position + Vector3.new(0, BossFarm.HeightOffset + BossFarm.HyugaHeightBoost + BossFarm.LavaSnakeHeightBoost + BossFarm.MandaHeightBoost + BossFarm.WeaponHeightBoost, 0), bossRoot.Position) end
+
+            local bossRoot = GetBossRoot(h.Parent)
+            if not bossRoot then return end
+
+            local char = LocalPlayer.Character
+            if not char then return end
+            local root = char:FindFirstChild("HumanoidRootPart")
+            if not root then return end
+
+            if BossFarm.HakuSafeSpot and tick() >= BossFarm.HakuSafeSpotEndTime then
+                BossFarm.HakuSafeSpot = false
+            end
+
+            if BossFarm.HyugaInVoid then
+                root.CFrame = CFrame.new(HYUGA_VOID_SAFE_SPOT)
+            elseif BossFarm.HakuSafeSpot then
+                root.CFrame = CFrame.new(-2969.2, 1832.9, -9610.4)
+            else
+                root.CFrame = CFrame.lookAt(
+                    bossRoot.Position + Vector3.new(
+                        0,
+                        BossFarm.HeightOffset
+                            + BossFarm.HyugaHeightBoost
+                            + BossFarm.LavaSnakeHeightBoost
+                            + BossFarm.MandaHeightBoost
+                            + BossFarm.RingedSamuraiHeightBoost
+                            + BossFarm.WeaponHeightBoost,
+                        0
+                    ),
+                    bossRoot.Position
+                )
+            end
         end)
     end)
 
     BossFarm.Thread = task.spawn(function()
         while BossFarm.Enabled do
+            if PlayerFarmSafety.Hiding then task.wait(0.2); continue end
             if not BossFarm.HyugaInVoid and BossFarm.Target and BossFarm.Target.Parent and BossFarm.Target.Health > 0 then
                 if Hub.AutoBlock and Hub.AutoBlock.CurrentlyBlocking then task.wait(0.05); continue end
-                if Hub.DataEvent then pcall(function() local br = GetBossRoot(BossFarm.Target.Parent); if br then Hub.DataEvent:FireServer("Dash", "Sub", br.Position) end end); task.wait(0.05); pcall(function() Hub.DataEvent:FireServer("CheckMeleeHit", nil, "NormalAttack", false) end) end
-            end; task.wait(BossFarm.AttackDelay)
+                local br = GetBossRoot(BossFarm.Target.Parent)
+                if br then
+                    AutoUseSelectedSkills(br.Position)
+                    if Hub.DataEvent then
+                        pcall(function() Hub.DataEvent:FireServer("Dash", "Sub", br.Position) end)
+                        task.wait(0.05)
+                        pcall(function() Hub.DataEvent:FireServer("CheckMeleeHit", nil, "NormalAttack", false) end)
+                    end
+                end
+            end
+            task.wait(BossFarm.AttackDelay)
         end
     end)
 end
@@ -541,6 +1042,8 @@ local function StopBossFarm()
     if BossFarm.HakuAnimConnection then BossFarm.HakuAnimConnection:Disconnect(); BossFarm.HakuAnimConnection = nil end
     if BossFarm.LavaSnakeAnimConnection then BossFarm.LavaSnakeAnimConnection:Disconnect(); BossFarm.LavaSnakeAnimConnection = nil end
     if BossFarm.MandaAnimConnection then BossFarm.MandaAnimConnection:Disconnect(); BossFarm.MandaAnimConnection = nil end
+    BossFarm.RingedSamuraiHeightBoost = 0
+    if BossFarm.RingedSamuraiAnimConnection then BossFarm.RingedSamuraiAnimConnection:Disconnect(); BossFarm.RingedSamuraiAnimConnection = nil end
     if BossFarm.KnockedThread then pcall(task.cancel, BossFarm.KnockedThread); BossFarm.KnockedThread = nil end
     if BossFarm.AnchorConn then BossFarm.AnchorConn:Disconnect(); BossFarm.AnchorConn = nil end
     if BossFarm.Thread then pcall(task.cancel, BossFarm.Thread); BossFarm.Thread = nil end
@@ -873,16 +1376,7 @@ local function GetActiveChakraCount()
 end
 
 local function IsSafeFarmContextActive()
-    -- Chakra Safety only activates when at least one farming system is running
-    if Hub.MissionSystem and Hub.MissionSystem.AutoEnabled then return true end
-    if Hub.BossFarm and Hub.BossFarm.Enabled then return true end
-    if Hub.AutoEye and Hub.AutoEye.Enabled then return true end
-    if Hub.AutoGripFarm and (Hub.AutoGripFarm.AltEnabled or Hub.AutoGripFarm.MainEnabled) then return true end
-    if Hub.AutoTrinket and Hub.AutoTrinket.Enabled then return true end
-    -- ChakraCollector and RiftCollector are stored on Hub by the UI module
-    if Hub.ChakraCollector and Hub.ChakraCollector.Running then return true end
-    if Hub.RiftCollector and Hub.RiftCollector.Running then return true end
-    return false
+    return IsActivelyAutoFarming()
 end
 
 local function PauseFarms()
@@ -962,6 +1456,9 @@ local function ResumeFarms(saved)
     if saved.AutoMission and not saved.MissionTarget then Hub.StartAutoMission() end
 end
 
+Hub.PauseFarms = PauseFarms
+Hub.ResumeFarms = ResumeFarms
+
 local function ChakraSafetyLoop()
     while ChakraSafety.Enabled do
         local activeCount = GetActiveChakraCount()
@@ -1012,30 +1509,65 @@ Hub.StopChakraSafety = StopChakraSafety
 -- BUY ITEMS (Direct Remote)
 -- ================================================================
 local BuyItemsData = {
-    { Name = "Onyx Resanagi", Price = 60, Workspace = "Onyx Resanagi3" },
-    { Name = "Golden Resanagi", Price = 40, Workspace = "Golden Resanagi1" },
-    { Name = "Silver Resanagi", Price = 25, Workspace = "Silver Resanagi3" },
-    { Name = "Silver Zabunagi", Price = 50, Workspace = "Silver Zabunagi" },
-    { Name = "Golden Zabunagi", Price = 70, Workspace = "Silver Zabunagi" },
-    { Name = "Onyx Zabunagi", Price = 90, Workspace = "Onyx Zabunagi" },
-    { Name = "Onyx Asumai", Price = 70, Workspace = "Onyx Asumai" },
+    { Name = "Onyx Resanagi", Price = 60, Workspace = "Onyx Resanagi3", Amount = 1 },
+    { Name = "Golden Resanagi", Price = 40, Workspace = "Golden Resanagi1", Amount = 1 },
+    { Name = "Silver Resanagi", Price = 25, Workspace = "Silver Resanagi3", Amount = 1 },
+    { Name = "Silver Zabunagi", Price = 50, Workspace = "Silver Zabunagi", Amount = 1 },
+    { Name = "Golden Zabunagi", Price = 70, Workspace = "Silver Zabunagi", Amount = 1 },
+    { Name = "Onyx Zabunagi", Price = 90, Workspace = "Onyx Zabunagi", Amount = 1 },
+    { Name = "Onyx Asumai", Price = 70, Workspace = "Onyx Asumai", Amount = 1 },
+    { Name = "Ramen", Price = 40, WorkspaceIndex = 2168, Amount = 1, AllowedAmounts = {1, 5} },
 }
+
 local BuyItemsLookup = {}
 local BuyItemNames = {}
-for _, item in ipairs(BuyItemsData) do BuyItemsLookup[item.Name] = item; table.insert(BuyItemNames, item.Name) end
+for _, item in ipairs(BuyItemsData) do
+    BuyItemsLookup[item.Name] = item
+    table.insert(BuyItemNames, item.Name)
+end
+
 Hub.SelectedBuyItem = BuyItemNames[1]
+Hub.RamenBuyAmount = 1
+
+local function ResolveBuyTarget(item)
+    if item.Workspace then
+        return workspace:FindFirstChild(item.Workspace)
+    end
+    if item.WorkspaceIndex then
+        local children = workspace:GetChildren()
+        return children[item.WorkspaceIndex] and (children[item.WorkspaceIndex]:FindFirstChild("HumanoidRootPart") or children[item.WorkspaceIndex])
+    end
+    return nil
+end
 
 local function BuySelectedItem()
     local item = BuyItemsLookup[Hub.SelectedBuyItem]
     if not item then Notify("No item selected!", 2); return end
-    local wsObj = workspace:FindFirstChild(item.Workspace)
-    if not wsObj then Notify("Shop NPC '" .. item.Workspace .. "' not found!", 3); return end
+
+    local amount = item.Name == "Ramen" and (Hub.RamenBuyAmount or 1) or (item.Amount or 1)
+    local wsObj = ResolveBuyTarget(item)
+    if not wsObj then Notify("Shop target not found for '" .. item.Name .. "'!", 3); return end
+
     local ok, err = pcall(function()
-        Hub.DataFunction:InvokeServer("Pay", item.Price, item.Name, 1, wsObj)
+        Hub.RefreshDataFunction()
+        if not Hub.DataFunction then error("DataFunction missing") end
+        Hub.DataFunction:InvokeServer("Pay", item.Price, item.Name, amount, wsObj)
     end)
-    if ok then Notify("Bought: " .. item.Name, 2) else Notify("Buy failed: " .. tostring(err), 3) end
+
+    if ok then
+        Notify("Bought: " .. item.Name .. " x" .. tostring(amount), 2)
+    else
+        Notify("Buy failed: " .. tostring(err), 3)
+    end
 end
 
 Hub.BuyItemsData = BuyItemsData
 Hub.BuyItemNames = BuyItemNames
 Hub.BuySelectedItem = BuySelectedItem
+
+task.spawn(function()
+    task.wait(2)
+    if Hub.StartPlayerFarmSafety then
+        Hub.StartPlayerFarmSafety()
+    end
+end)

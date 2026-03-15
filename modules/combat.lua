@@ -83,17 +83,39 @@ local BackAttach = {
     HeartbeatConn = nil,
     MaxDistance = 200,
     Offset = 3,
+    LastNoTargetNotify = 0,
 }
 
-local function GetNearestPlayer()
-    local char = LocalPlayer.Character; if not char then return nil end; local root = char:FindFirstChild("HumanoidRootPart"); if not root then return nil end
-    local nearest, nearestDist = nil, BackAttach.MaxDistance
+local function IsValidBackAttachTarget(player)
+    if player == LocalPlayer then return false end
+    local tc = player and player.Character
+    if not tc then return false end
+    local tr = tc:FindFirstChild("HumanoidRootPart")
+    local hum = tc:FindFirstChildOfClass("Humanoid")
+    if not tr or not hum or hum.Health <= 0 then return false end
+    return true, tc, tr, hum
+end
+
+local function GetNearestPlayerInRange(maxDistance)
+    local char = LocalPlayer.Character
+    if not char then return nil end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not root then return nil end
+
+    local nearest, nearestRoot, nearestDist = nil, nil, maxDistance or BackAttach.MaxDistance
     for _, player in ipairs(Players:GetPlayers()) do
-        if player == LocalPlayer then continue end; local tc = player.Character; if not tc then continue end
-        local tr = tc:FindFirstChild("HumanoidRootPart"); if not tr then continue end; local hum = tc:FindFirstChildOfClass("Humanoid"); if not hum or hum.Health <= 0 then continue end
-        local dist = (root.Position - tr.Position).Magnitude; if dist < nearestDist then nearestDist = dist; nearest = player end
+        local ok, _, tr = IsValidBackAttachTarget(player)
+        if ok and tr then
+            local dist = (root.Position - tr.Position).Magnitude
+            if dist <= (maxDistance or BackAttach.MaxDistance) and dist < nearestDist then
+                nearest = player
+                nearestRoot = tr
+                nearestDist = dist
+            end
+        end
     end
-    return nearest, nearestDist
+
+    return nearest, nearestRoot, nearestDist
 end
 
 local function StopBackAttach()
@@ -104,26 +126,59 @@ end
 
 local function StartBackAttach()
     BackAttach.Enabled = true
-    if BackAttach.HeartbeatConn then BackAttach.HeartbeatConn:Disconnect() end
+    if BackAttach.HeartbeatConn then BackAttach.HeartbeatConn:Disconnect(); BackAttach.HeartbeatConn = nil end
+
     BackAttach.HeartbeatConn = RunService.Heartbeat:Connect(function()
         if not BackAttach.Enabled then return end
-        local char = LocalPlayer.Character; if not char then StopBackAttach(); return end
-        local root = char:FindFirstChild("HumanoidRootPart"); if not root then StopBackAttach(); return end
-        local target, dist = GetNearestPlayer()
-        if not target or dist > BackAttach.MaxDistance then
-            Notify("No valid player within 200 studs.", 2)
-            StopBackAttach()
+
+        local char = LocalPlayer.Character
+        if not char then StopBackAttach(); return end
+
+        local root = char:FindFirstChild("HumanoidRootPart")
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if not root or not hum or hum.Health <= 0 then StopBackAttach(); return end
+
+        local target = BackAttach.Target
+        local targetRoot = nil
+
+        if target then
+            local valid, _, tr = IsValidBackAttachTarget(target)
+            if valid and tr and (root.Position - tr.Position).Magnitude <= BackAttach.MaxDistance then
+                targetRoot = tr
+            else
+                BackAttach.Target = nil
+            end
+        end
+
+        if not targetRoot then
+            local nearest, nearestRoot = GetNearestPlayerInRange(BackAttach.MaxDistance)
+            if nearest and nearestRoot then
+                BackAttach.Target = nearest
+                targetRoot = nearestRoot
+            end
+        end
+
+        if not targetRoot then
+            if tick() - BackAttach.LastNoTargetNotify > 2 then
+                BackAttach.LastNoTargetNotify = tick()
+                Notify("No valid player within 200 studs.", 2)
+            end
             return
         end
-        BackAttach.Target = target
-        local tr = target.Character and target.Character:FindFirstChild("HumanoidRootPart")
-        if tr then
-            root.CFrame = tr.CFrame * CFrame.new(0, 0, -BackAttach.Offset)
-        end
+
+        local desired = targetRoot.CFrame * CFrame.new(0, 0, -BackAttach.Offset)
+        root.CFrame = CFrame.lookAt(desired.Position, targetRoot.Position)
+        root.AssemblyLinearVelocity = Vector3.zero
+        root.AssemblyAngularVelocity = Vector3.zero
     end)
 end
 
-LocalPlayer.CharacterAdded:Connect(function() if BackAttach.Enabled then task.wait(1); StartBackAttach() end end)
+LocalPlayer.CharacterAdded:Connect(function()
+    if BackAttach.Enabled then
+        task.wait(1)
+        StartBackAttach()
+    end
+end)
 
 Hub.BackAttach = BackAttach
 Hub.StartBackAttach = StartBackAttach

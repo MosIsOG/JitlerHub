@@ -365,21 +365,33 @@ local function MissionFarmLoop(target, heightOffset, attackDelay)
 
     MissionSystem.AttackThread = task.spawn(function()
         while MissionSystem.ActiveMission and hum and hum.Parent and hum.Health > 0 do
-            -- Check if Chakra Safety is hiding us - pause attacking
             if Hub.ChakraSafety and Hub.ChakraSafety.Hiding then
                 task.wait(0.5)
                 continue
             end
-            -- Pause attacks while AutoBlock is blocking
-            if Hub.AutoBlock and Hub.AutoBlock.CurrentlyBlocking then task.wait(0.05); continue end
+            if Hub.PlayerFarmSafety and Hub.PlayerFarmSafety.Hiding then
+                task.wait(0.5)
+                continue
+            end
+            if Hub.AutoBlock and Hub.AutoBlock.CurrentlyBlocking then
+                task.wait(0.05)
+                continue
+            end
+
             pcall(function()
                 if Hub.DataEvent then
                     local br = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Head")
-                    if br then Hub.DataEvent:FireServer("Dash", "Sub", br.Position) end
+                    if br then
+                        if Hub.AutoUseSelectedSkills then
+                            Hub.AutoUseSelectedSkills(br.Position)
+                        end
+                        Hub.DataEvent:FireServer("Dash", "Sub", br.Position)
+                    end
                     task.wait(0.05)
                     Hub.DataEvent:FireServer("CheckMeleeHit", nil, "NormalAttack", false)
                 end
             end)
+
             task.wait(attackDelay)
         end
     end)
@@ -393,6 +405,40 @@ local function StopMissionFarm()
     MissionSystem.CurrentHeightOffset = nil
     MissionSystem.CurrentAttackDelay = nil
     MissionSystem.ExtraHeightBoost = 0
+end
+
+local function RetryMissionGripUntilConfirmed(model, maxAttempts)
+    maxAttempts = maxAttempts or 12
+    local mobRoot = model and (model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Head") or model:FindFirstChildWhichIsA("BasePart"))
+    if not mobRoot then return false end
+
+    for _ = 1, maxAttempts do
+        local char = Hub.LocalPlayer.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        if root then
+            root.CFrame = CFrame.new(mobRoot.Position)
+        end
+
+        task.wait(0.08)
+        if Hub.DataEvent then
+            pcall(function() Hub.DataEvent:FireServer("Grip") end)
+        end
+
+        local beingGripped = model:FindFirstChild("BeingGripped", true)
+        local confirmed = false
+        pcall(function()
+            if beingGripped and (beingGripped.Value == true or beingGripped.Value == "ON" or beingGripped.Value == 1) then
+                confirmed = true
+            end
+        end)
+        if confirmed then
+            return true
+        end
+
+        task.wait(0.35)
+    end
+
+    return false
 end
 
 local function MonitorKnockedForGrip(model)
@@ -410,19 +456,17 @@ local function MonitorKnockedForGrip(model)
             end)
             if isKnocked then
                 Hub.Notify("Mob knocked! Gripping...", 2)
-                -- Stop anchor and attack so we can move to the mob
                 if MissionSystem.AnchorConn then MissionSystem.AnchorConn:Disconnect(); MissionSystem.AnchorConn = nil end
                 if MissionSystem.AttackThread then pcall(task.cancel, MissionSystem.AttackThread); MissionSystem.AttackThread = nil end
                 Hub.StopCharging()
-                -- Teleport to mob and grip
-                local mobRoot = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Head") or model:FindFirstChildWhichIsA("BasePart")
-                if mobRoot then
-                    local char = Hub.LocalPlayer.Character
-                    local root = char and char:FindFirstChild("HumanoidRootPart")
-                    if root then root.CFrame = CFrame.new(mobRoot.Position) end
-                    task.wait(0.1)
-                    if Hub.DataEvent then pcall(function() Hub.DataEvent:FireServer("Grip") end) end
+
+                local success = RetryMissionGripUntilConfirmed(model, 12)
+                if success then
+                    Hub.Notify("Grip confirmed!", 2)
+                else
+                    Hub.Notify("Grip retry timed out.", 2)
                 end
+
                 task.wait(0.5)
                 StopMissionFarm()
                 return
@@ -544,10 +588,17 @@ local function ExecuteMissionCase(missionName)
                 if healthVal and healthVal:IsA("NumberValue") and healthVal.Value <= 0 then break end
                 if Hub.AutoBlock and Hub.AutoBlock.CurrentlyBlocking then task.wait(0.05); continue end
                 if Hub.ChakraSafety and Hub.ChakraSafety.Hiding then task.wait(0.5); continue end
+                if Hub.PlayerFarmSafety and Hub.PlayerFarmSafety.Hiding then task.wait(0.5); continue end
+
                 pcall(function()
                     if Hub.DataEvent then
                         local cpPartNow = cpModel:FindFirstChildWhichIsA("BasePart")
-                        if cpPartNow then Hub.DataEvent:FireServer("Dash", "Sub", cpPartNow.Position) end
+                        if cpPartNow then
+                            if Hub.AutoUseSelectedSkills then
+                                Hub.AutoUseSelectedSkills(cpPartNow.Position)
+                            end
+                            Hub.DataEvent:FireServer("Dash", "Sub", cpPartNow.Position)
+                        end
                         task.wait(0.05)
                         Hub.DataEvent:FireServer("CheckMeleeHit", nil, "NormalAttack", false)
                     end

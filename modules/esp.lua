@@ -442,17 +442,113 @@ Hub.StartPlayerHighlight = StartPlayerHighlight
 Hub.StopPlayerHighlight = StopPlayerHighlight
 
 -- ================================================================
--- MOB ESP SYSTEM
 -- CorruptedPoint ESP
-local CorruptedPointESP = { Enabled = false, Thread = nil }
-local function StartCorruptedPointESP()
-    CorruptedPointESP.Enabled = true
-    -- Add actual ESP logic here
+-- ================================================================
+local CorruptedPointESP = {
+    Enabled = false,
+    Thread = nil,
+    RenderConn = nil,
+    MaxDistance = 3000,
+    TextSize = 15,
+    Objects = {},
+}
+
+local function ClearCorruptedPointESP()
+    for _, obj in pairs(CorruptedPointESP.Objects) do
+        pcall(function() if obj.Text then obj.Text.Visible = false; obj.Text:Remove() end end)
+    end
+    CorruptedPointESP.Objects = {}
 end
+
+local function ScanCorruptedPoints()
+    local seen = {}
+    for _, obj in ipairs(workspace:GetChildren()) do
+        if obj:IsA("Model") and obj.Name == "CorruptedPoint" then
+            local part = obj:FindFirstChildWhichIsA("BasePart")
+            local health = obj:FindFirstChild("Health")
+            local destroyed = obj:FindFirstChild("Destroyed")
+            if part and health and (not destroyed or destroyed.Value ~= true) then
+                seen[obj] = true
+                if not CorruptedPointESP.Objects[obj] then
+                    CorruptedPointESP.Objects[obj] = {
+                        Text = Drawing.new("Text"),
+                    }
+                    local txt = CorruptedPointESP.Objects[obj].Text
+                    txt.Center = true
+                    txt.Outline = true
+                    txt.Visible = false
+                    txt.Size = CorruptedPointESP.TextSize
+                    txt.Color = Color3.fromRGB(255, 140, 140)
+                end
+            end
+        end
+    end
+
+    for model, draw in pairs(CorruptedPointESP.Objects) do
+        if not seen[model] then
+            pcall(function() draw.Text.Visible = false; draw.Text:Remove() end)
+            CorruptedPointESP.Objects[model] = nil
+        end
+    end
+end
+
+local function RenderCorruptedPoints()
+    local char = LocalPlayer.Character
+    local root = char and (char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Head"))
+    if not root then return end
+
+    for model, draw in pairs(CorruptedPointESP.Objects) do
+        local part = model and model.Parent and model:FindFirstChildWhichIsA("BasePart")
+        local health = model and model.Parent and model:FindFirstChild("Health")
+        local destroyed = model and model.Parent and model:FindFirstChild("Destroyed")
+        local txt = draw and draw.Text
+        if not txt then continue end
+
+        if not model or not model.Parent or not part or not health or (destroyed and destroyed.Value == true) then
+            txt.Visible = false
+            continue
+        end
+
+        local dist = (root.Position - part.Position).Magnitude
+        if dist > CorruptedPointESP.MaxDistance then
+            txt.Visible = false
+            continue
+        end
+
+        local vp, onScreen = Camera:WorldToViewportPoint(part.Position + Vector3.new(0, 4, 0))
+        if not onScreen or vp.Z <= 0 then
+            txt.Visible = false
+            continue
+        end
+
+        txt.Size = CorruptedPointESP.TextSize
+        txt.Position = Vector2.new(vp.X, vp.Y)
+        txt.Text = string.format("CorruptedPoint\nHP: %s\n[%d studs]", tostring(math.floor(health.Value)), math.floor(dist))
+        txt.Visible = CorruptedPointESP.Enabled
+    end
+end
+
+local function StartCorruptedPointESP()
+    if CorruptedPointESP.Thread then pcall(task.cancel, CorruptedPointESP.Thread) end
+    if CorruptedPointESP.RenderConn then CorruptedPointESP.RenderConn:Disconnect() end
+
+    CorruptedPointESP.Enabled = true
+    CorruptedPointESP.Thread = task.spawn(function()
+        while CorruptedPointESP.Enabled do
+            ScanCorruptedPoints()
+            task.wait(1)
+        end
+    end)
+    CorruptedPointESP.RenderConn = RunService.RenderStepped:Connect(RenderCorruptedPoints)
+end
+
 local function StopCorruptedPointESP()
     CorruptedPointESP.Enabled = false
-    -- Cleanup logic
+    if CorruptedPointESP.Thread then pcall(task.cancel, CorruptedPointESP.Thread); CorruptedPointESP.Thread = nil end
+    if CorruptedPointESP.RenderConn then CorruptedPointESP.RenderConn:Disconnect(); CorruptedPointESP.RenderConn = nil end
+    ClearCorruptedPointESP()
 end
+
 Hub.CorruptedPointESP = CorruptedPointESP
 Hub.StartCorruptedPointESP = StartCorruptedPointESP
 Hub.StopCorruptedPointESP = StopCorruptedPointESP

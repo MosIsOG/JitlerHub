@@ -8,12 +8,98 @@ local Notify = Hub.Notify
 -- ================================================================
 -- VOID & LAVA PROTECTION
 -- ================================================================
-local function ToggleVoidLava(enabled)
-    local count = 0
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if (obj.Name == "Void" or obj.Name == "Lava") and obj.ClassName == "Part" then pcall(function() obj.CanTouch = not enabled; count = count + 1 end) end
+local AntiVoidLavaState = {
+    Enabled = false,
+    Patched = {},
+    AddedConn = nil,
+}
+
+local function PatchLavaPart(obj)
+    if not obj or not obj:IsA("BasePart") then return false end
+    if obj.Name ~= "Lava" then return false end
+
+    pcall(function()
+        AntiVoidLavaState.Patched[obj] = {
+            Parent = obj.Parent,
+            Name = obj.Name,
+            CanTouch = obj.CanTouch,
+            CanCollide = obj.CanCollide,
+            Transparency = obj.Transparency,
+        }
+
+        obj.Parent = workspace
+        obj.Name = "FakeLava"
+        obj.CanTouch = false
+        obj.CanCollide = false
+        obj.Transparency = math.clamp(obj.Transparency, 0, 1)
+    end)
+
+    return true
+end
+
+local function RestorePatchedLava()
+    for obj, old in pairs(AntiVoidLavaState.Patched) do
+        if obj and obj.Parent then
+            pcall(function()
+                obj.Name = old.Name or "Lava"
+                obj.CanTouch = old.CanTouch
+                obj.CanCollide = old.CanCollide
+                if old.Parent then obj.Parent = old.Parent end
+            end)
+        end
     end
-    Notify(enabled and ("Anti Void/Lava ON (" .. count .. " parts)") or ("Anti Void/Lava OFF (" .. count .. " parts)"), 2)
+    table.clear(AntiVoidLavaState.Patched)
+end
+
+local function ToggleVoidLava(enabled)
+    AntiVoidLavaState.Enabled = enabled
+
+    if AntiVoidLavaState.AddedConn then
+        AntiVoidLavaState.AddedConn:Disconnect()
+        AntiVoidLavaState.AddedConn = nil
+    end
+
+    local count = 0
+    if enabled then
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            if obj:IsA("BasePart") then
+                if obj.Name == "Void" then
+                    pcall(function()
+                        obj.CanTouch = false
+                        count = count + 1
+                    end)
+                elseif obj.Name == "Lava" then
+                    if PatchLavaPart(obj) then
+                        count = count + 1
+                    end
+                end
+            end
+        end
+
+        AntiVoidLavaState.AddedConn = workspace.DescendantAdded:Connect(function(obj)
+            if not AntiVoidLavaState.Enabled then return end
+            task.defer(function()
+                pcall(function()
+                    if obj:IsA("BasePart") then
+                        if obj.Name == "Void" then
+                            obj.CanTouch = false
+                        elseif obj.Name == "Lava" then
+                            PatchLavaPart(obj)
+                        end
+                    end
+                end)
+            end)
+        end)
+    else
+        RestorePatchedLava()
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            if obj:IsA("BasePart") and obj.Name == "Void" then
+                pcall(function() obj.CanTouch = true end)
+            end
+        end
+    end
+
+    Notify(enabled and ("Anti Void/Lava ON (" .. count .. " parts)") or ("Anti Void/Lava OFF"), 2)
 end
 
 Hub.ToggleVoidLava = ToggleVoidLava
