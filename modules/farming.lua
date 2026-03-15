@@ -651,6 +651,8 @@ local function TriggerBossSpawnIfNeeded(bossName)
     end
 end
 
+local FindBoss -- forward-declared to avoid nil call when used early
+
 local function WaitForBossSpawnOrSkip(bossName, timeout)
     timeout = timeout or 16
     TriggerBossSpawnIfNeeded(bossName)
@@ -828,7 +830,7 @@ local function IsInHyugaVoidZone(pos) return pos.X >= -826.4 and pos.X <= -524.0
 
 local function GetBossRoot(model) return model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Head") or model:FindFirstChild("Torso") or model:FindFirstChildWhichIsA("BasePart") end
 
-local function FindBoss(bossName)
+FindBoss = function(bossName)
     for _, folder in ipairs({ "NPCs", "Mobs", "Enemies", workspace }) do
         local sf = folder == workspace and folder or workspace:FindFirstChild(folder); if not sf then continue end
         for _, model in ipairs(sf:GetChildren()) do if model:IsA("Model") and model.Name == bossName then local hum = model:FindFirstChildOfClass("Humanoid"); if hum and hum.Health > 0 then return hum, model end end end
