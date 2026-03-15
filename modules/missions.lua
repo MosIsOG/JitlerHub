@@ -578,7 +578,7 @@ local function ExecuteMissionCase(missionName)
                     if not MissionSystem.ActiveMission then mandaConn:Disconnect(); return end
                     local assetId = track.Animation.AnimationId:match("rbxassetid://(%d+)") or track.Animation.AnimationId
                     if assetId == "9954909571" then
-                        MissionSystem.ExtraHeightBoost = 15
+                        MissionSystem.ExtraHeightBoost = 6
                         task.spawn(function()
                             while track and track.IsPlaying and MissionSystem.ActiveMission do task.wait(0.1) end
                             task.wait(0.5)

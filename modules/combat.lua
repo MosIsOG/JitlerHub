@@ -77,7 +77,13 @@ Hub.StopRemoteAttack = StopRemoteAttack
 -- ================================================================
 -- BACK ATTACH
 -- ================================================================
-local BackAttach = { Enabled = false, Weld = nil, Target = nil, HeartbeatConn = nil, MaxDistance = 200 }
+local BackAttach = {
+    Enabled = false,
+    Target = nil,
+    HeartbeatConn = nil,
+    MaxDistance = 200,
+    Offset = 3,
+}
 
 local function GetNearestPlayer()
     local char = LocalPlayer.Character; if not char then return nil end; local root = char:FindFirstChild("HumanoidRootPart"); if not root then return nil end
@@ -87,23 +93,34 @@ local function GetNearestPlayer()
         local tr = tc:FindFirstChild("HumanoidRootPart"); if not tr then continue end; local hum = tc:FindFirstChildOfClass("Humanoid"); if not hum or hum.Health <= 0 then continue end
         local dist = (root.Position - tr.Position).Magnitude; if dist < nearestDist then nearestDist = dist; nearest = player end
     end
-    return nearest
+    return nearest, nearestDist
 end
 
 local function StopBackAttach()
-    BackAttach.Enabled = false; if BackAttach.Weld then BackAttach.Weld:Destroy(); BackAttach.Weld = nil end
-    if BackAttach.HeartbeatConn then BackAttach.HeartbeatConn:Disconnect(); BackAttach.HeartbeatConn = nil end; BackAttach.Target = nil
+    BackAttach.Enabled = false
+    if BackAttach.HeartbeatConn then BackAttach.HeartbeatConn:Disconnect(); BackAttach.HeartbeatConn = nil end
+    BackAttach.Target = nil
 end
 
 local function StartBackAttach()
-    local char = LocalPlayer.Character; if not char then BackAttach.Enabled = false; return end
-    local myRoot = char:FindFirstChild("HumanoidRootPart"); if not myRoot then BackAttach.Enabled = false; return end
-    local target = GetNearestPlayer(); if not target or not target.Character then Notify("No player within " .. BackAttach.MaxDistance .. " studs!", 3); BackAttach.Enabled = false; return end
-    local targetRoot = target.Character:FindFirstChild("HumanoidRootPart"); if not targetRoot then BackAttach.Enabled = false; return end
-    BackAttach.Target = target; myRoot.CFrame = targetRoot.CFrame * CFrame.new(0, 0, 2.5)
-    local weld = Instance.new("WeldConstraint"); weld.Part0 = myRoot; weld.Part1 = targetRoot; weld.Parent = myRoot; BackAttach.Weld = weld
-    Notify("Attached to " .. target.Name, 2)
-    BackAttach.HeartbeatConn = RunService.Heartbeat:Connect(function() if not BackAttach.Enabled then return end; if not target.Character or not target.Character:FindFirstChild("HumanoidRootPart") then StopBackAttach() end end)
+    BackAttach.Enabled = true
+    if BackAttach.HeartbeatConn then BackAttach.HeartbeatConn:Disconnect() end
+    BackAttach.HeartbeatConn = RunService.Heartbeat:Connect(function()
+        if not BackAttach.Enabled then return end
+        local char = LocalPlayer.Character; if not char then StopBackAttach(); return end
+        local root = char:FindFirstChild("HumanoidRootPart"); if not root then StopBackAttach(); return end
+        local target, dist = GetNearestPlayer()
+        if not target or dist > BackAttach.MaxDistance then
+            Notify("No valid player within 200 studs.", 2)
+            StopBackAttach()
+            return
+        end
+        BackAttach.Target = target
+        local tr = target.Character and target.Character:FindFirstChild("HumanoidRootPart")
+        if tr then
+            root.CFrame = tr.CFrame * CFrame.new(0, 0, -BackAttach.Offset)
+        end
+    end)
 end
 
 LocalPlayer.CharacterAdded:Connect(function() if BackAttach.Enabled then task.wait(1); StartBackAttach() end end)
