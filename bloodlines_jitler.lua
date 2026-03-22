@@ -73,6 +73,16 @@ local function LoadModule(modName)
 end
 
 local placeId = game.PlaceId
+-- Allow overriding the placeId through a global config before execution
+local overrideId = nil
+if _G.load_game then overrideId = tonumber(_G.load_game) end
+if _G.LOAD_GAME then overrideId = tonumber(_G.LOAD_GAME) end
+if type(load_game) == 'string' then overrideId = tonumber(load_game) end
+if overrideId then
+    placeId = overrideId
+    Hub.Notify("Jitler Hub: place id overridden to " .. placeId, 3)
+end
+
 local fullModules = { 'esp.lua', 'combat.lua', 'movement.lua', 'farming.lua', 'missions.lua', 'ui.lua' }
 local baseModules = { 'esp.lua', 'movement.lua', 'ui.lua' }
 
