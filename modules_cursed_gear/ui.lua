@@ -1,3 +1,6 @@
+-- Ensure 'shared' is defined for environments where it may be missing
+if not shared then shared = {} end
+
 -- Jitler Hub - UI Module (Window, Tabs, Widgets)
 local Hub = shared.JitlerHub
 local JitlerUI = Hub.JitlerUI
@@ -80,44 +83,6 @@ ESPRight:CreateToggle({ Name = "Enable Mob ESP", Description = "Show mob names &
 ESPRight:CreateSlider({ Name = "Mob Max Distance", Range = { 100, 2000 }, Increment = 50, Suffix = " studs", CurrentValue = 500, Flag = "MobMaxDist", Callback = function(v) Hub.MobESP.MaxDistance = v end })
 ESPRight:CreateSlider({ Name = "Mob Text Size", Range = { 8, 24 }, Increment = 1, Suffix = "px", CurrentValue = 14, Flag = "MobTextSize", Callback = function(v) Hub.MobESP.TextSize = v end })
 
-ESPRight:CreateSection("Boss ESP")
-
-ESPRight:CreateToggle({ Name = "Enable Boss ESP", Description = "Show WorldBoss HP panel (close) / text (far)", CurrentValue = false, Flag = "BossESP", Callback = function(v) Hub.BossESP.Enabled = v; if v then Hub.StartBossESP() else Hub.StopBossESP() end end })
-ESPRight:CreateSlider({ Name = "Boss Max Distance", Range = { 100, 5000 }, Increment = 50, Suffix = " studs", CurrentValue = 2000, Flag = "BossMaxDist", Callback = function(v) Hub.BossESP.MaxDistance = v end })
-ESPRight:CreateSlider({ Name = "Boss Panel Distance", Range = { 50, 1000 }, Increment = 25, Suffix = " studs", CurrentValue = 500, Flag = "BossTransDist", Callback = function(v) Hub.BossESP.TransitionDist = v end })
-ESPRight:CreateSlider({ Name = "Boss Text Size", Range = { 8, 24 }, Increment = 1, Suffix = "px", CurrentValue = 14, Flag = "BossTextSize", Callback = function(v) Hub.BossESP.TextSize = v end })
-
-ESPRight:CreateSection("Corrupted Point ESP")
-
-ESPRight:CreateToggle({
-    Name = "Enable CorruptedPoint ESP",
-    Description = "Show CorruptedPoint current health",
-    CurrentValue = false,
-    Flag = "CorruptedPointESP",
-    Callback = function(v)
-        Hub.CorruptedPointESP.Enabled = v
-        if v then Hub.StartCorruptedPointESP() else Hub.StopCorruptedPointESP() end
-    end
-})
-ESPRight:CreateSlider({
-    Name = "CP ESP Text Size",
-    Range = { 8, 24 },
-    Increment = 1,
-    Suffix = "px",
-    CurrentValue = 15,
-    Flag = "CorruptedPointESPTextSize",
-    Callback = function(v) Hub.CorruptedPointESP.TextSize = v end
-})
-ESPRight:CreateSlider({
-    Name = "CP ESP Max Distance",
-    Range = { 100, 5000 },
-    Increment = 50,
-    Suffix = " studs",
-    CurrentValue = 3000,
-    Flag = "CorruptedPointESPDist",
-    Callback = function(v) Hub.CorruptedPointESP.MaxDistance = v end
-})
-
     end
 end
 
@@ -135,8 +100,6 @@ MLeft:CreateSlider({ Name = "Speed Multiplier", Range = { 0.1, 25 }, Increment =
     if Hub.WalkspeedMultiplier.Enabled and Hub.WalkspeedMultiplier.BaseSpeed then local c = LocalPlayer.Character; if c then local h = c:FindFirstChildOfClass("Humanoid"); if h then h.WalkSpeed = Hub.WalkspeedMultiplier.BaseSpeed * v end end end
 end })
 
-MLeft:CreateSlider({ Name = "BackAttach Offset", Range = { 1, 10 }, Increment = 0.1, Suffix = " studs", CurrentValue = 3, Flag = "BackAttachOffset", Callback = function(v) Hub.BackAttach.Offset = v end })
-MLeft:CreateToggle({ Name = "Lava Protection", Description = "Disable Lava/void damage", CurrentValue = false, Flag = "LavaProtection", Callback = function(v) Hub.ToggleVoidLava(v) end })
 MLeft:CreateToggleWithKeybind({ Name = "Fly", Description = "Fly freely in any direction", CurrentValue = false, Flag = "Fly", Callback = function(v) Hub.FlySystem.Enabled = v; if v then Hub.StartFlying() else Hub.StopFlying() end end }, { CurrentKeybind = "Y", Flag = "FlyKey" })
 MLeft:CreateSlider({ Name = "Fly Speed", Range = { 10, 300 }, Increment = 5, Suffix = "", CurrentValue = 50, Flag = "FlySpeed", Callback = function(v) Hub.FlySystem.Speed = v end })
 
@@ -144,22 +107,7 @@ MLeft:CreateToggleWithKeybind({ Name = "Infinite Jump", CurrentValue = false, Fl
 
 MLeft:CreateToggleWithKeybind({ Name = "Noclip", Description = "Walk through walls", CurrentValue = false, Flag = "Noclip", Callback = function(v) _G.Noclip = v end }, { CurrentKeybind = "N", Flag = "NoclipKey" })
 
-if available.Combat then
-    MRight:CreateSection("Combat")
 
-    MRight:CreateToggleWithKeybind({ Name = "M1 Spam", Description = "Auto-click at set interval", CurrentValue = false, Flag = "M1Spam", Callback = function(v) Hub.M1Spam.Enabled = v; if v then Hub.StartSpam() else Hub.StopSpam() end end }, { CurrentKeybind = "L", Flag = "M1SpamKey" })
-    MRight:CreateSlider({ Name = "Click Delay", Range = { 0.02, 0.5 }, Increment = 0.01, Suffix = "s", CurrentValue = 0.1, Flag = "M1Delay", Callback = function(v) Hub.M1Spam.Delay = v end })
-
-    MRight:CreateToggleWithKeybind({ Name = "Remote Attack Spam", Description = "Fire remote attack", CurrentValue = false, Flag = "RemoteAttack", Callback = function(v) Hub.RemoteAttackSpam.Enabled = v; if v then Hub.StartRemoteAttack() else Hub.StopRemoteAttack() end end }, { CurrentKeybind = "K", Flag = "RemoteAttackKey" })
-
-    MRight:CreateToggle({ Name = "NoStun", Description = "Prevents stun from sticking", CurrentValue = false, Flag = "NoStun", Callback = function(v) Hub.NoStun.Enabled = v; if v then Hub.StartNoStun() else Hub.StopNoStun() end end })
-end
-
-MRight:CreateSection("Protection")
-
-MRight:CreateToggleWithKeybind({ Name = "No Fall Damage", Description = "Prevent all fall damage", CurrentValue = false, Flag = "NoFall", Callback = function(v) Hub.NoFall.Enabled = v end }, { CurrentKeybind = "F7", Flag = "NoFallKey" })
-
-MRight:CreateToggleWithKeybind({ Name = "Anti Void/Lava", Description = "Block void and lava kills", CurrentValue = false, Flag = "AntiVoidLava", Callback = function(v) Hub.ToggleVoidLava(v) end }, { CurrentKeybind = "V", Flag = "AntiVoidLavaKey" })
 end
 
 -- ================================================================
@@ -176,14 +124,6 @@ QLeft:CreateToggle({ Name = "No Rain", CurrentValue = false, Flag = "NoRain", Ca
 QLeft:CreateToggle({ Name = "Full Bright", CurrentValue = false, Flag = "FullBright", Callback = function(v) Hub.ToggleFullBright(v, Hub.FullBrightLevel) end })
 QLeft:CreateSlider({ Name = "Brightness Level", Range = { 0.5, 5 }, Increment = 0.1, Suffix = "", CurrentValue = 2, Flag = "BrightnessLvl", Callback = function(v) Hub.FullBrightLevel = v; if Hub.FullBrightEnabled then Hub.ToggleFullBright(true, v) end end })
 
-QRight:CreateSection("Combat Assist")
-
-QRight:CreateToggleWithKeybind({ Name = "Auto Perfect Block", Description = "Auto time perfect blocks", CurrentValue = false, Flag = "AutoBlock", Callback = function(v) Hub.AutoBlock.Enabled = v; if v then Hub.StartAutoBlock() else Hub.StopAutoBlock() end end }, { CurrentKeybind = "U", Flag = "AutoBlockKey" })
-
-QRight:CreateToggleWithKeybind({ Name = "Back Attach", Description = "TP behind nearest player", CurrentValue = false, Flag = "BackAttach", Callback = function(v) Hub.BackAttach.Enabled = v; if v then Hub.StartBackAttach() else Hub.StopBackAttach() end end }, { CurrentKeybind = "B", Flag = "BackAttachKey" })
-
-QRight:CreateButton({ Name = "Buy Ramen", Description = "Buy ramen from shop", Callback = function() Hub.BuyRamen() end })
-QRight:CreateInput({ Name = "Auto Use Skill", Description = "Skill name to auto use", Flag = "AutoSkillName", Callback = function(v) Hub.AutoUseSkill(v) end })
 
 QRight:CreateSection("Utility")
 
