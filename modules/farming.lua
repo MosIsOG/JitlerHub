@@ -85,6 +85,31 @@ Hub.ToggleFullBright = ToggleFullBright
 local CHARGE_ANIM_ID = "rbxassetid://9864206537"
 local ChargingState = { Active = false, AnimTrack = nil }
 
+-- ================================================================
+-- AUTO SKILL HELPERS
+-- ================================================================
+Hub.AutoSkillFarm = Hub.AutoSkillFarm or { Enabled = false, SelectedSkills = {} }
+local AutoSkillLast = 0
+local AutoSkillInterval = 0.5
+
+local function AutoUseSelectedSkills(pos)
+    if not Hub.AutoSkillFarm or not Hub.AutoSkillFarm.Enabled then
+        return
+    end
+
+    local now = tick()
+    if now - AutoSkillLast < AutoSkillInterval then
+        return
+    end
+    AutoSkillLast = now
+
+    for skillName, enabled in pairs(Hub.AutoSkillFarm.SelectedSkills or {}) do
+        if enabled and skillName and skillName ~= "" then
+            Hub.AutoUseSkill(skillName)
+        end
+    end
+end
+
 local function StartCharging()
     if ChargingState.Active then return end
     ChargingState.Active = true

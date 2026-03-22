@@ -62,9 +62,33 @@ function Hub.TeleportTo(pos)
 end
 
 local BASE = 'https://raw.githubusercontent.com/MosIsOG/JitlerHub/refs/heads/master/modules/'
-loadstring(game:HttpGet(BASE .. 'esp.lua'))()
-loadstring(game:HttpGet(BASE .. 'combat.lua'))()
-loadstring(game:HttpGet(BASE .. 'movement.lua'))()
-loadstring(game:HttpGet(BASE .. 'farming.lua'))()
-loadstring(game:HttpGet(BASE .. 'missions.lua'))()
-loadstring(game:HttpGet(BASE .. 'ui.lua'))()
+
+local function LoadModule(modName)
+    local ok, err = pcall(function()
+        loadstring(game:HttpGet(BASE .. modName))()
+    end)
+    if not ok then
+        Hub.Notify("Jitler Hub: failed to load module " .. modName .. " (" .. tostring(err) .. ")", 5)
+    end
+end
+
+local placeId = game.PlaceId
+local fullModules = { 'esp.lua', 'combat.lua', 'movement.lua', 'farming.lua', 'missions.lua', 'ui.lua' }
+local baseModules = { 'esp.lua', 'movement.lua', 'ui.lua' }
+
+if placeId == 5571328985 then
+    for _, mod in ipairs(fullModules) do
+        LoadModule(mod)
+    end
+    Hub.Notify("Jitler Hub: full support loaded for place " .. placeId, 3)
+elseif placeId == 10154506972 then
+    for _, mod in ipairs(baseModules) do
+        LoadModule(mod)
+    end
+    Hub.Notify("Jitler Hub: base support loaded for place " .. placeId, 3)
+else
+    for _, mod in ipairs(fullModules) do
+        LoadModule(mod)
+    end
+    Hub.Notify("Jitler Hub: default full support loaded for place " .. placeId, 3)
+end
