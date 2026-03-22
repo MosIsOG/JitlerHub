@@ -86,17 +86,30 @@ end
 local fullModules = { 'esp.lua', 'combat.lua', 'movement.lua', 'farming.lua', 'missions.lua', 'ui.lua' }
 local baseModules = { 'esp.lua', 'movement.lua', 'ui.lua' }
 
+-- default module visibility when place is not in special list
+Hub.AvailableModules = {
+    ESP = true,
+    Combat = true,
+    Movement = true,
+    Farming = true,
+    Missions = true,
+    UI = true,
+}
+
 if placeId == 5571328985 then
+    Hub.AvailableModules = { ESP = true, Combat = true, Movement = true, Farming = true, Missions = true, UI = true }
     for _, mod in ipairs(fullModules) do
         LoadModule(mod)
     end
     Hub.Notify("Jitler Hub: full support loaded for place " .. placeId, 3)
 elseif placeId == 10154506972 then
+    Hub.AvailableModules = { ESP = true, Combat = false, Movement = true, Farming = false, Missions = false, UI = true }
     for _, mod in ipairs(baseModules) do
         LoadModule(mod)
     end
     Hub.Notify("Jitler Hub: base support loaded for place " .. placeId, 3)
 else
+    Hub.AvailableModules = { ESP = true, Combat = true, Movement = true, Farming = true, Missions = true, UI = true }
     for _, mod in ipairs(fullModules) do
         LoadModule(mod)
     end

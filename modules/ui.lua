@@ -22,9 +22,10 @@ local Window = JitlerUI:CreateWindow({
     SettingsIcon = "rbxassetid://7734053495",
 })
 
+local available = Hub.AvailableModules or { ESP = true, Combat = true, Movement = true, Farming = true, Missions = true, UI = true }
 local MainTab = Window:CreateTab({ Name = "Main", Icon = "rbxassetid://11347112400" })
-local ESPTab = Window:CreateTab({ Name = "ESP", Icon = "rbxassetid://6523858394" })
-local AutoFarmTab = Window:CreateTab({ Name = "AutoFarm", Icon = "rbxassetid://130840043704422" })
+local ESPTab = available.ESP and Window:CreateTab({ Name = "ESP", Icon = "rbxassetid://6523858394" })
+local AutoFarmTab = available.Farming and Window:CreateTab({ Name = "AutoFarm", Icon = "rbxassetid://130840043704422" })
 local TeleportTab = Window:CreateTab({ Name = "Teleports", Icon = "rbxassetid://139799091866771" })
 
 local SubMain = MainTab:CreateSubTab("Main")
@@ -33,9 +34,10 @@ local SubQOL = MainTab:CreateSubTab("Misc")
 -- ================================================================
 -- ESP TAB
 -- ================================================================
-do
-local ESPLeft, ESPRight = ESPTab:CreateDualPane()
-local Options = Hub.Options
+if ESPTab then
+    do
+        local ESPLeft, ESPRight = ESPTab:CreateDualPane()
+        local Options = Hub.Options
 
 ESPLeft:CreateSection("Player ESP")
 
@@ -121,6 +123,7 @@ ESPLeft:CreateSection("NPC ESP")
 ESPLeft:CreateToggle({ Name = "Enable NPC ESP", Description = "Show dialog NPCs (lime green)", CurrentValue = false, Flag = "NPCESP", Callback = function(v) Hub.NPCESP.Enabled = v; if v then Hub.StartNPCESP() else Hub.StopNPCESP() end end })
 ESPLeft:CreateSlider({ Name = "NPC Max Distance", Range = { 100, 2000 }, Increment = 50, Suffix = " studs", CurrentValue = 500, Flag = "NPCMaxDist", Callback = function(v) Hub.NPCESP.MaxDistance = v end })
 ESPLeft:CreateSlider({ Name = "NPC Text Size", Range = { 8, 24 }, Increment = 1, Suffix = "px", CurrentValue = 14, Flag = "NPCTextSize", Callback = function(v) Hub.NPCESP.TextSize = v end })
+    end
 end
 
 -- ================================================================
@@ -146,14 +149,16 @@ MLeft:CreateToggleWithKeybind({ Name = "Infinite Jump", CurrentValue = false, Fl
 
 MLeft:CreateToggleWithKeybind({ Name = "Noclip", Description = "Walk through walls", CurrentValue = false, Flag = "Noclip", Callback = function(v) _G.Noclip = v end }, { CurrentKeybind = "N", Flag = "NoclipKey" })
 
-MRight:CreateSection("Combat")
+if available.Combat then
+    MRight:CreateSection("Combat")
 
-MRight:CreateToggleWithKeybind({ Name = "M1 Spam", Description = "Auto-click at set interval", CurrentValue = false, Flag = "M1Spam", Callback = function(v) Hub.M1Spam.Enabled = v; if v then Hub.StartSpam() else Hub.StopSpam() end end }, { CurrentKeybind = "L", Flag = "M1SpamKey" })
-MRight:CreateSlider({ Name = "Click Delay", Range = { 0.02, 0.5 }, Increment = 0.01, Suffix = "s", CurrentValue = 0.1, Flag = "M1Delay", Callback = function(v) Hub.M1Spam.Delay = v end })
+    MRight:CreateToggleWithKeybind({ Name = "M1 Spam", Description = "Auto-click at set interval", CurrentValue = false, Flag = "M1Spam", Callback = function(v) Hub.M1Spam.Enabled = v; if v then Hub.StartSpam() else Hub.StopSpam() end end }, { CurrentKeybind = "L", Flag = "M1SpamKey" })
+    MRight:CreateSlider({ Name = "Click Delay", Range = { 0.02, 0.5 }, Increment = 0.01, Suffix = "s", CurrentValue = 0.1, Flag = "M1Delay", Callback = function(v) Hub.M1Spam.Delay = v end })
 
-MRight:CreateToggleWithKeybind({ Name = "Remote Attack Spam", Description = "Fire remote attack", CurrentValue = false, Flag = "RemoteAttack", Callback = function(v) Hub.RemoteAttackSpam.Enabled = v; if v then Hub.StartRemoteAttack() else Hub.StopRemoteAttack() end end }, { CurrentKeybind = "K", Flag = "RemoteAttackKey" })
+    MRight:CreateToggleWithKeybind({ Name = "Remote Attack Spam", Description = "Fire remote attack", CurrentValue = false, Flag = "RemoteAttack", Callback = function(v) Hub.RemoteAttackSpam.Enabled = v; if v then Hub.StartRemoteAttack() else Hub.StopRemoteAttack() end end }, { CurrentKeybind = "K", Flag = "RemoteAttackKey" })
 
-MRight:CreateToggle({ Name = "NoStun", Description = "Prevents stun from sticking", CurrentValue = false, Flag = "NoStun", Callback = function(v) Hub.NoStun.Enabled = v; if v then Hub.StartNoStun() else Hub.StopNoStun() end end })
+    MRight:CreateToggle({ Name = "NoStun", Description = "Prevents stun from sticking", CurrentValue = false, Flag = "NoStun", Callback = function(v) Hub.NoStun.Enabled = v; if v then Hub.StartNoStun() else Hub.StopNoStun() end end })
+end
 
 MRight:CreateSection("Protection")
 
@@ -238,8 +243,9 @@ end
 -- ================================================================
 -- AUTOFARM TAB
 -- ================================================================
-do
-local AFLeft, AFRight = AutoFarmTab:CreateDualPane()
+if AutoFarmTab then
+    do
+        local AFLeft, AFRight = AutoFarmTab:CreateDualPane()
 
 AFLeft:CreateSection("Boss Farm")
 
@@ -454,6 +460,7 @@ AFLeft:CreateSection("Chakra Sense Safety")
 
 AFLeft:CreateToggle({ Name = "Enable Chakra Safety", Description = "Hide at Secret Spot when Chakra Sense detected", CurrentValue = false, Flag = "ChakraSafety", Callback = function(v) Hub.ChakraSafety.Enabled = v; if v then Hub.StartChakraSafety() else Hub.StopChakraSafety() end end })
 AFLeft:CreateSlider({ Name = "Check Interval", Range = { 0.5, 5 }, Increment = 0.5, Suffix = "s", CurrentValue = 1, Flag = "ChakraSafetyInterval", Callback = function(v) Hub.ChakraSafety.CheckInterval = v end })
+    end
 end
 
 -- ================================================================
