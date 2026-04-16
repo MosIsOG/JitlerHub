@@ -4,8 +4,8 @@ if not shared then shared = {} end
 local Hub = shared.JitlerHub
 local Notify = Hub and Hub.Notify or function() end
 
-local function infiniteYield()
-    return game.Workspace:WaitForChild("")
+local function noop()
+    return nil
 end
 
 local bypassed = false
@@ -19,13 +19,13 @@ pcall(function()
             setreadonly(v, false)
 
             if type(rawget(v, "indexInstance")) == "table" then
-                v.indexInstance = { "kick", infiniteYield }
+                v.indexInstance = { v.indexInstance[1], noop }
             end
             if type(rawget(v, "newindexInstance")) == "table" then
-                v.newindexInstance = { "kick", infiniteYield }
+                v.newindexInstance = { v.newindexInstance[1], noop }
             end
             if type(rawget(v, "namecallInstance")) == "table" then
-                v.namecallInstance = { "kick", infiniteYield }
+                v.namecallInstance = { v.namecallInstance[1], noop }
             end
 
             setreadonly(v, true)
