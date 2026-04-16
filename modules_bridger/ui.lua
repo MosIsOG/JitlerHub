@@ -26,9 +26,9 @@ local Window = JitlerUI:CreateWindow({
 })
 
 local available = Hub.AvailableModules or { ESP = true, Movement = true, UI = true }
-local MainTab = Window:CreateTab({ Name = "Main", Icon = "rbxassetid://11347112400" })
-local ESPTab = available.ESP and Window:CreateTab({ Name = "ESP", Icon = "rbxassetid://6523858394" })
-local TeleportTab = Window:CreateTab({ Name = "Teleports", Icon = "rbxassetid://139799091866771" })
+local MainTab = Window:CreateTab({ Name = "Main", Icon = "rbxassetid://11347112400", Section = "Main" })
+local ESPTab = available.ESP and Window:CreateTab({ Name = "ESP", Icon = "rbxassetid://6523858394", Section = "Main" })
+local TeleportTab = Window:CreateTab({ Name = "Teleports", Icon = "rbxassetid://139799091866771", Section = "Main" })
 
 local SubMain = MainTab:CreateSubTab("Main")
 local SubQOL = MainTab:CreateSubTab("Misc")
