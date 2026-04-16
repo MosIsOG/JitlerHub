@@ -61,9 +61,31 @@ function Hub.TeleportTo(pos)
     local root = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Head"); if root then root.CFrame = CFrame.new(pos) end
 end
 
+-- Resolve root/homepage place ID from the universe, not the current sub-place
+local placeId = game.PlaceId
+pcall(function()
+    local response = game:HttpGet("https://games.roblox.com/v1/games?universeIds=" .. game.GameId)
+    local data = HttpService:JSONDecode(response)
+    if data and data.data and data.data[1] and data.data[1].rootPlaceId then
+        placeId = data.data[1].rootPlaceId
+    end
+end)
+
+-- Allow overriding the placeId through a global config before execution
+local overrideId = nil
+if _G.load_game then overrideId = tonumber(_G.load_game) end
+if _G.LOAD_GAME then overrideId = tonumber(_G.LOAD_GAME) end
+if type(load_game) == 'string' then overrideId = tonumber(load_game) end
+if overrideId then
+    placeId = overrideId
+    Hub.Notify("Jitler Hub: place id overridden to " .. placeId, 3)
+end
+
 local function getBaseFolder()
     if placeId == 5571328985 then
         return 'https://raw.githubusercontent.com/MosIsOG/JitlerHub/refs/heads/master/modules_bloodlines/'
+    elseif placeId == 99449877692519 then
+        return 'https://raw.githubusercontent.com/MosIsOG/JitlerHub/refs/heads/master/modules_bridger/'
     else
         return 'https://raw.githubusercontent.com/MosIsOG/JitlerHub/refs/heads/master/modules_cursed_gear/'
     end
@@ -80,19 +102,9 @@ local function LoadModule(modName)
     end
 end
 
-local placeId = game.PlaceId
--- Allow overriding the placeId through a global config before execution
-local overrideId = nil
-if _G.load_game then overrideId = tonumber(_G.load_game) end
-if _G.LOAD_GAME then overrideId = tonumber(_G.LOAD_GAME) end
-if type(load_game) == 'string' then overrideId = tonumber(load_game) end
-if overrideId then
-    placeId = overrideId
-    Hub.Notify("Jitler Hub: place id overridden to " .. placeId, 3)
-end
-
 local bloodlinesModules = { 'esp.lua', 'combat.lua', 'movement.lua', 'farming.lua', 'missions.lua', 'ui.lua' }
 local cursedGearModules = { 'esp.lua', 'movement.lua', 'ui.lua' }
+local bridgerModules = { 'esp.lua', 'movement.lua', 'ui.lua' }
 
 -- default module visibility
 Hub.AvailableModules = {
@@ -110,6 +122,10 @@ if placeId == 5571328985 then
     Hub.AvailableModules = { ESP = true, Combat = true, Movement = true, Farming = true, Missions = true, UI = true }
     modulesToLoad = bloodlinesModules
     Hub.Notify("Jitler Hub: bloodlines_module loaded for place " .. placeId, 3)
+elseif placeId == 99449877692519 then
+    Hub.AvailableModules = { ESP = true, Combat = false, Movement = true, Farming = false, Missions = false, UI = true }
+    modulesToLoad = bridgerModules
+    Hub.Notify("Jitler Hub: bridger_module loaded for place " .. placeId, 3)
 else
     Hub.AvailableModules = { ESP = true, Combat = false, Movement = true, Farming = false, Missions = false, UI = true }
     modulesToLoad = cursedGearModules
