@@ -104,7 +104,7 @@ end
 
 local bloodlinesModules = { 'esp.lua', 'combat.lua', 'movement.lua', 'farming.lua', 'missions.lua', 'ui.lua' }
 local cursedGearModules = { 'esp.lua', 'movement.lua', 'ui.lua' }
-local bridgerModules = { 'esp.lua', 'movement.lua', 'ui.lua' }
+local bridgerModules = { 'anticheat.lua', 'esp.lua', 'movement.lua', 'ui.lua' }
 
 -- default module visibility
 Hub.AvailableModules = {
