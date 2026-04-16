@@ -1,19 +1,19 @@
 -- Jitler Hub - Adonis Anti-Cheat Bypass Module (Bridger)
--- Bypasses the Adonis "Anti" and "Anti-Cheat" modules by
--- neutralizing the Detected() reporting function.
+-- Two-layer bypass:
+--   1) Hook the Detected() reporting function (filtergc + debug.info spoof)
+--   2) Hook Adonis metamethod handlers found via getgc (kick/crash prevention)
 
 if not shared then shared = {} end
 local Hub = shared.JitlerHub
 local Notify = Hub and Hub.Notify or function() end
 
-local success = false
+local bypassCount = 0
 
+-- ================================================================
+-- LAYER 1: Detected() function bypass via filtergc
+-- ================================================================
 pcall(function()
-    -- Require UNC functions
-    if not filtergc or not hookfunction then
-        Notify("Adonis bypass: missing filtergc or hookfunction", 3)
-        return
-    end
+    if typeof(filtergc) ~= "function" or typeof(hookfunction) ~= "function" then return end
 
     -- Get the real environment's debug.info (not executor-overridden)
     local realDebugInfo
@@ -24,27 +24,19 @@ pcall(function()
     realDebugInfo = realDebugInfo or debug.info
 
     -- Find the Adonis Detected function via GC constants
-    local detectedFunc = nil
     local results = filtergc("function", {
         Constants = { " - On Xbox", " - On mobile" },
         IgnoreExecutor = true,
     })
 
-    if results and #results > 0 then
-        detectedFunc = results[1]
-    end
+    local detectedFunc = results and results[1]
+    if not detectedFunc then return end
 
-    if not detectedFunc then
-        -- Adonis Anti module not present in this game
-        return
-    end
-
-    -- Cache debug.info results for the Detected function before hooking
-    -- debug.info(func, "slnfa") returns: source, line, name, nparams, isvararg
+    -- Cache debug.info results before hooking to defeat Adonis's hook-detection
     local cachedSource, cachedLine, cachedName, cachedNParams, cachedIsVarArg =
         realDebugInfo(detectedFunc, "slnfa")
 
-    -- Hook debug.info to return cached results when queried about the Detected function
+    -- Spoof debug.info for the Detected function
     local originalDebugInfo = hookfunction(realDebugInfo, function(target, ...)
         if target == detectedFunc then
             return cachedSource, cachedLine, cachedName, cachedNParams, cachedIsVarArg
@@ -52,15 +44,53 @@ pcall(function()
         return originalDebugInfo(target, ...)
     end)
 
-    -- Hook the Detected function itself - return true to prevent kick/crash
-    -- Returning true is critical: "not Detected(...)" checks would catch false/nil
+    -- Neutralize Detected — must return true to avoid "not Detected(...)" checks
     hookfunction(detectedFunc, function()
         return true
     end)
 
-    success = true
+    bypassCount = bypassCount + 1
 end)
 
-if success then
-    Notify("Adonis anti-cheat bypassed", 3)
+-- ================================================================
+-- LAYER 2: Adonis metamethod handler hooks via getgc
+-- ================================================================
+pcall(function()
+    if typeof(getgc) ~= "function" or typeof(hookfunction) ~= "function" then return end
+    local islclosure = islclosure or function(f) return type(f) == "function" and debug.info(f, "s") ~= "[C]" end
+
+    local function hookAdonisHandlers(metaTbl)
+        for _, handlerTable in pairs(metaTbl) do
+            if type(handlerTable) == "table" then
+                for _, func in pairs(handlerTable) do
+                    if type(func) == "function" and islclosure(func) then
+                        hookfunction(func, function()
+                            return true
+                        end)
+                    end
+                end
+            end
+        end
+    end
+
+    for _, v in pairs(getgc(true)) do
+        if
+            typeof(v) == "table"
+            and rawget(v, "indexInstance")
+            and rawget(v, "newindexInstance")
+            and rawget(v, "namecallInstance")
+            and type(rawget(v, "newindexInstance")) == "table"
+        then
+            if v["newindexInstance"][1] == "kick" then
+                hookAdonisHandlers(v)
+                bypassCount = bypassCount + 1
+                break
+            end
+        end
+    end
+end)
+
+-- ================================================================
+if bypassCount > 0 then
+    Notify("Adonis anti-cheat bypassed (" .. bypassCount .. " layers)", 3)
 end
