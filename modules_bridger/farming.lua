@@ -3,14 +3,24 @@
 
 if not shared then shared = {} end
 local Hub = shared.JitlerHub
-local Players = Hub.Players
 local LocalPlayer = Hub.LocalPlayer
 local Notify = Hub.Notify
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Remotes = ReplicatedStorage:WaitForChild("Remotes", 5)
-local UseTool = Remotes and Remotes:FindFirstChild("UseTool")
-local UpdateSlotData = Remotes and Remotes:FindFirstChild("UpdateSlotData")
+-- Resolve remotes with retry
+local Remotes = ReplicatedStorage:WaitForChild("Remotes", 10)
+if not Remotes then
+    Notify("Auto Fish: 'Remotes' folder not found!", 5)
+    return
+end
+
+local UseTool = Remotes:WaitForChild("UseTool", 10)
+local UpdateSlotData = Remotes:FindFirstChild("UpdateSlotData")
+
+if not UseTool then
+    Notify("Auto Fish: 'UseTool' remote not found!", 5)
+    return
+end
 
 -- ================================================================
 -- AUTO FISH
@@ -25,22 +35,47 @@ Hub.AutoFish = {
 
 local function waitForFishBite(timeout)
     local char = LocalPlayer.Character
-    if not char then return false end
-    local root = char:FindFirstChild("HumanoidRootPart")
+    local root = char and char:FindFirstChild("HumanoidRootPart")
     if not root then return false end
 
-    local elapsed = 0
-    local step = 0.1
-    while elapsed < timeout do
-        if not Hub.AutoFish.Enabled then return false end
-        local bite = root:FindFirstChild("FishBite")
-        if bite and bite:IsA("Sound") then
-            return true
+    local gotBite = false
+    local conns = {}
+
+    -- Event: new sound child added to root
+    table.insert(conns, root.ChildAdded:Connect(function(child)
+        if child.Name == "FishBite" then
+            gotBite = true
         end
-        task.wait(step)
-        elapsed = elapsed + step
+    end))
+
+    -- Event: existing FishBite sound starts playing
+    local existing = root:FindFirstChild("FishBite")
+    if existing and existing:IsA("Sound") then
+        table.insert(conns, existing:GetPropertyChangedSignal("Playing"):Connect(function()
+            if existing.Playing then gotBite = true end
+        end))
+        -- If it's already playing right now, count it
+        if existing.Playing then gotBite = true end
     end
-    return false
+
+    -- Wait loop with early exit
+    local elapsed = 0
+    while elapsed < timeout and not gotBite and Hub.AutoFish.Enabled do
+        task.wait(0.1)
+        elapsed = elapsed + 0.1
+        -- Fallback poll in case events didn't fire
+        if not existing then
+            existing = root:FindFirstChild("FishBite")
+            if existing and existing:IsA("Sound") and existing.Playing then
+                gotBite = true
+            end
+        end
+    end
+
+    for _, c in ipairs(conns) do
+        pcall(function() c:Disconnect() end)
+    end
+    return gotBite
 end
 
 local function autoFishLoop()
@@ -53,32 +88,36 @@ local function autoFishLoop()
             continue
         end
 
-        -- Use bait first if enabled
-        if Hub.AutoFish.UseBait and UseTool then
-            pcall(function()
+        -- Step 1: Use bait
+        if Hub.AutoFish.UseBait then
+            local ok, err = pcall(function()
                 UseTool:FireServer("Bait", "Primary")
             end)
+            if not ok then Notify("Fish: Bait error - " .. tostring(err), 3) end
             task.wait(0.5)
         end
 
-        -- Cast fishing rod
-        if UseTool then
+        -- Step 2: Cast rod
+        local ok, err = pcall(function()
+            UseTool:FireServer("FishingRod", "Primary")
+        end)
+        if not ok then
+            Notify("Fish: Cast error - " .. tostring(err), 3)
+            task.wait(2)
+            continue
+        end
+
+        -- Step 3: Wait for bite (max 30s)
+        local gotBite = waitForFishBite(30)
+
+        if not Hub.AutoFish.Enabled then break end
+
+        if gotBite then
+            task.wait(Hub.AutoFish.BiteDelay)
+            -- Step 4: Reel in
             pcall(function()
                 UseTool:FireServer("FishingRod", "Primary")
             end)
-        end
-
-        -- Wait for fish bite (max 30 seconds)
-        local gotBite = waitForFishBite(30)
-
-        if gotBite and Hub.AutoFish.Enabled then
-            task.wait(Hub.AutoFish.BiteDelay)
-            -- Reel in
-            if UseTool then
-                pcall(function()
-                    UseTool:FireServer("FishingRod", "Primary")
-                end)
-            end
         end
 
         task.wait(Hub.AutoFish.CastDelay)
@@ -88,12 +127,15 @@ local function autoFishLoop()
 end
 
 function Hub.StartAutoFish()
-    if Hub.AutoFish.Thread then pcall(task.cancel, Hub.AutoFish.Thread) end
+    if Hub.AutoFish.Thread then
+        Hub.AutoFish.Enabled = false
+        task.wait(0.2)
+    end
     Hub.AutoFish.Enabled = true
     Hub.AutoFish.Thread = task.spawn(autoFishLoop)
 end
 
 function Hub.StopAutoFish()
     Hub.AutoFish.Enabled = false
-    if Hub.AutoFish.Thread then pcall(task.cancel, Hub.AutoFish.Thread); Hub.AutoFish.Thread = nil end
+    Hub.AutoFish.Thread = nil
 end
