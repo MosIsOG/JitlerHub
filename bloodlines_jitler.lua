@@ -104,7 +104,7 @@ end
 
 local bloodlinesModules = { 'esp.lua', 'combat.lua', 'movement.lua', 'farming.lua', 'missions.lua', 'ui.lua' }
 local cursedGearModules = { 'esp.lua', 'movement.lua', 'ui.lua' }
-local bridgerModules = { 'anticheat.lua', 'esp.lua', 'movement.lua', 'ui.lua' }
+local bridgerModules = { 'anticheat.lua', 'esp.lua', 'movement.lua', 'farming.lua', 'ui.lua' }
 
 -- default module visibility
 Hub.AvailableModules = {
@@ -123,7 +123,7 @@ if placeId == 5571328985 then
     modulesToLoad = bloodlinesModules
     Hub.Notify("Jitler Hub: bloodlines_module loaded for place " .. placeId, 3)
 elseif placeId == 99449877692519 then
-    Hub.AvailableModules = { ESP = true, Combat = false, Movement = true, Farming = false, Missions = false, UI = true }
+    Hub.AvailableModules = { ESP = true, Combat = false, Movement = true, Farming = true, Missions = false, UI = true }
     modulesToLoad = bridgerModules
     Hub.Notify("Jitler Hub: bridger_module loaded for place " .. placeId, 3)
 else

@@ -25,9 +25,10 @@ local Window = JitlerUI:CreateWindow({
     SettingsIcon = "rbxassetid://7734053495",
 })
 
-local available = Hub.AvailableModules or { ESP = true, Movement = true, UI = true }
+local available = Hub.AvailableModules or { ESP = true, Movement = true, Farming = true, UI = true }
 local MainTab = Window:CreateTab({ Name = "Main", Icon = "rbxassetid://11347112400", Section = "Main" })
 local ESPTab = available.ESP and Window:CreateTab({ Name = "ESP", Icon = "rbxassetid://6523858394", Section = "Main" })
+local FarmTab = available.Farming and Window:CreateTab({ Name = "Farming", Icon = "rbxassetid://130840043704422", Section = "Farming" })
 local TeleportTab = Window:CreateTab({ Name = "Teleports", Icon = "rbxassetid://139799091866771", Section = "Main" })
 
 local SubMain = MainTab:CreateSubTab("Main")
@@ -130,6 +131,28 @@ QRight:CreateButton({ Name = "Reset Character", Callback = function() local char
 QRight:CreateButton({ Name = "Random Server Hop", Callback = function() Hub.DoServerHop("random") end })
 QRight:CreateButton({ Name = "Low Player Server", Callback = function() Hub.DoServerHop("min") end })
 
+end
+
+-- ================================================================
+-- FARMING TAB
+-- ================================================================
+if FarmTab then
+    do
+        local FLeft, FRight = FarmTab:CreateDualPane()
+
+        FLeft:CreateSection("Auto Fish")
+
+        FLeft:CreateToggle({ Name = "Enable Auto Fish", Description = "Cast, wait for bite, reel in, repeat", CurrentValue = false, Flag = "AutoFish", Callback = function(v)
+            Hub.AutoFish.Enabled = v
+            if v then Hub.StartAutoFish() else Hub.StopAutoFish() end
+        end })
+
+        FLeft:CreateToggle({ Name = "Use Bait", Description = "Apply bait before each cast", CurrentValue = true, Flag = "UseBait", Callback = function(v) Hub.AutoFish.UseBait = v end })
+
+        FLeft:CreateSlider({ Name = "Bite Delay", Description = "Wait after bite before reeling", Range = { 0.1, 2 }, Increment = 0.1, Suffix = "s", CurrentValue = 0.3, Flag = "BiteDelay", Callback = function(v) Hub.AutoFish.BiteDelay = v end })
+
+        FLeft:CreateSlider({ Name = "Cast Delay", Description = "Wait between casts", Range = { 0.5, 5 }, Increment = 0.1, Suffix = "s", CurrentValue = 1.5, Flag = "CastDelay", Callback = function(v) Hub.AutoFish.CastDelay = v end })
+    end
 end
 
 -- ================================================================
